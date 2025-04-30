@@ -79,28 +79,9 @@ class TensorBasedReplayBuffer(ReplayBuffer):
     def device_for_batches(self, new_device_for_batches: torch.device) -> None:
         self._device_for_batches = new_device_for_batches
 
-    def _process_single_state(self, state: Observation) -> torch.Tensor:
-        if isinstance(state, torch.Tensor):
-            return state.clone().detach()
-        else:
-            return torch.tensor(state)
-
-    def _process_single_action(self, action: Action) -> torch.Tensor:
-        if isinstance(action, torch.Tensor):
-            return action.clone().detach()
-        else:
-            return torch.tensor(action)
-
-    def _process_single_reward(self, reward: Reward) -> torch.Tensor:
-        return torch.tensor(reward)
-
-    def _process_single_terminated(self, terminated: bool) -> torch.Tensor:
-        return torch.tensor(terminated)  # (1,)
-
-    def _process_single_truncated(self, truncated: bool) -> torch.Tensor:
-        return torch.tensor(truncated)  # (1,)
-
-    def create_f_batch(self, batch_size: int, last_k_steps: int = 10000) -> TransitionBatch:
+    def create_f_batch(
+        self, batch_size: int, last_k_steps: int = 10000
+    ) -> TransitionBatch:
         """
         Create a batch of Transition objects with random state, action, reward,
         next_state, next_action, and terminated.
