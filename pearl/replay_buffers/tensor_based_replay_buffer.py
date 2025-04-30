@@ -30,39 +30,37 @@ class TensorBasedReplayBuffer(ReplayBuffer):
     ) -> None:
         super(TensorBasedReplayBuffer, self).__init__()
         self.capacity = capacity
-        self.states = None
+        self.observations: Optional[np.ndarray] = None
         self.pos = 0
         self.full = False
         self._device_for_batches: torch.device = get_default_device()
 
     def add(
         self,
-        state,
+        obs,
         action,
         reward,
         terminated,
         truncated,
-        next_state,
+        next_obs,
     ) -> None:
         if self.capacity == 0:
             return
-        if self.states is None:
-            self.states = np.zeros((self.capacity,) + state.shape, dtype=state.dtype)
+        if self.observations is None:
+            self.observations = np.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
             self.actions = np.zeros((self.capacity,) + action.shape, dtype=action.dtype)
             self.rewards = np.zeros(self.capacity, dtype=np.float32)
             self.terminateds = np.zeros(self.capacity, dtype=bool)
             self.truncateds = np.zeros(self.capacity, dtype=bool)
-            self.next_states = np.zeros(
-                (self.capacity,) + next_state.shape, dtype=next_state.dtype
+            self.next_observations = np.zeros(
+                (self.capacity,) + next_obs.shape, dtype=next_obs.dtype
             )
-
-        self.states[self.pos] = state
+        self.observations[self.pos] = obs
         self.actions[self.pos] = action
         self.rewards[self.pos] = reward
         self.terminateds[self.pos] = terminated
         self.truncateds[self.pos] = truncated
-        self.next_states[self.pos] = next_state
-
+        self.next_observations[self.pos] = next_obs
         self.pos += 1
         if self.pos == self.capacity:
             self.pos = 0
@@ -107,14 +105,14 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             max(self.pos - last_k_steps, 0), self.pos, size=batch_size
         )
         batch = TransitionBatch(
-            state=self.states[batch_inds, :],
+            state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],
             terminated=self.terminateds[batch_inds],
             truncated=self.truncateds[batch_inds],
             next_state=(
-                self.next_states[batch_inds, :]
-                if self.next_states is not None
+                self.next_observations[batch_inds, :]
+                if self.next_observations is not None
                 else None
             ),
         ).to(self.device_for_batches)
@@ -147,14 +145,14 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         # print(self.states)
         # print(self.actions[batch_inds, :])
         batch = TransitionBatch(
-            state=self.states[batch_inds, :],
+            state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],
             terminated=self.terminateds[batch_inds],
             truncated=self.truncateds[batch_inds],
             next_state=(
-                self.next_states[batch_inds, :]
-                if self.next_states is not None
+                self.next_observations[batch_inds, :]
+                if self.next_observations is not None
                 else None
             ),
         ).to(self.device_for_batches)
@@ -167,6 +165,6 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             return self.pos
 
     def clear(self) -> None:
-        self.states = None
+        self.observations = None
         self.pos = 0
         self.full = False

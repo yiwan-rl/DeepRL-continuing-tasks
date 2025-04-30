@@ -73,19 +73,19 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
 
     def push(
         self,
-        state: Observation,
+        obs: Observation,
         action: Action,
         reward: Reward,
-        next_state: Observation,
+        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:
 
         self.add(
-            state=state,
+            obs=obs,
             action=action,
             reward=reward,
-            next_state=next_state,
+            next_obs=next_obs,
             terminated=terminated,
             truncated=truncated,
         )
@@ -113,14 +113,14 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
         batch_inds = self._indices[self._count : self._count + batch_size]
 
         batch = OnPolicyTransitionBatch(
-            state=self.states[batch_inds, :],
+            state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],
             terminated=self.terminateds[batch_inds],
             truncated=self.truncateds[batch_inds],
             next_state=(
-                self.next_states[batch_inds, :]
-                if self.next_states is not None
+                self.next_observations[batch_inds, :]
+                if self.next_observations is not None
                 else None
             ),
             action_log_probs=self.action_log_probs[batch_inds, :],
@@ -142,14 +142,14 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
         """
 
         batch = TransitionBatch(
-            state=self.states[: self.pos, :],
+            state=self.observations[: self.pos, :],
             action=self.actions[: self.pos, :],
             reward=self.rewards[: self.pos],
             terminated=self.terminateds[: self.pos],
             truncated=self.truncateds[: self.pos],
             next_state=(
-                self.next_states[: self.pos, :]
-                if self.next_states is not None
+                self.next_observations[: self.pos, :]
+                if self.next_observations is not None
                 else None
             ),
         ).to(self.device_for_batches)

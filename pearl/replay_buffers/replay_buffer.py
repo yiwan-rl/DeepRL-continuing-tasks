@@ -48,10 +48,10 @@ class ReplayBuffer(ABC):
     @abstractmethod
     def push(
         self,
-        observation: Observation,
+        obs: Observation,
         action: Action,
         reward: Reward,
-        next_state: Observation,
+        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:

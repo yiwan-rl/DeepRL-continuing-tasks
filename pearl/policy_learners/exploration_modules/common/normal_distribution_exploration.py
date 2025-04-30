@@ -13,7 +13,7 @@ import torch
 
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     noise_scaling,
 )
@@ -41,7 +41,7 @@ class NormalDistributionExploration(ExplorationModule):
     def act(
         self,
         action_space: ActionSpace,
-        observation: Optional[Observation] = None,
+        subjective_state: Optional[SubjectiveState] = None,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
         action_availability_mask: Optional[torch.Tensor] = None,
@@ -63,7 +63,11 @@ class NormalDistributionExploration(ExplorationModule):
         # generate noise from a standard normal distribution
         noise = torch.normal(
             mean=torch.ones(action_dim, device=device) * self._mean,
-            std=self._std_dev.to(device) if isinstance(self._std_dev, torch.Tensor) else torch.ones(action_dim, device=device) * self._std_dev,
+            std=(
+                self._std_dev.to(device)
+                if isinstance(self._std_dev, torch.Tensor)
+                else torch.ones(action_dim, device=device) * self._std_dev
+            ),
         )
 
         # scale noise according to the action space

@@ -12,9 +12,9 @@ from enum import Enum
 from typing import Optional
 
 import torch
-from pearl.api.observation import Observation
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
+from pearl.api.state import SubjectiveState
 from pearl.replay_buffers.replay_buffer import ReplayBuffer
 
 
@@ -40,7 +40,7 @@ class ExplorationModule(ABC):
     @abstractmethod
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,

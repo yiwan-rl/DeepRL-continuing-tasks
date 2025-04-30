@@ -102,10 +102,10 @@ class PearlAgent(Agent):
             )
 
         self.replay_buffer.push(
-            state=self._latest_observation,
+            obs=self._latest_observation,
             action=self._latest_action.cpu().numpy(),
             reward=action_result.reward,
-            next_state=action_result.observation,
+            next_obs=action_result.observation,
             terminated=action_result.terminated,
             truncated=action_result.truncated,
         )

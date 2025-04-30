@@ -16,9 +16,10 @@ from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-from pearl.api.observation import Observation
+
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
+from pearl.api.state import SubjectiveState
 from pearl.neural_networks.common.utils import update_target_network
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
@@ -124,7 +125,7 @@ class DeepTDLearning(PolicyLearner):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
@@ -135,7 +136,7 @@ class DeepTDLearning(PolicyLearner):
         Q values or (ii) an 'exploratory action' obtained using the specified `exploration_module`.
 
         Args:
-            observation (Observation): Current observation.
+            subjective_state (SubjectiveState): Current subjective state.
             available_action_space (ActionSpace): Available action space at the current state.
                 Note that Pearl allows for action spaces to change dynamically.
             exploit (bool): When set to True, we output the exploit action (no exploration).
@@ -149,16 +150,16 @@ class DeepTDLearning(PolicyLearner):
         # Fix the available action space.
         assert isinstance(available_action_space, DiscreteActionSpace)
         with torch.no_grad():
-            batched_observation = observation.unsqueeze(0)  # (1 x state_dim)
+            batched_subjective_state = subjective_state.unsqueeze(0)  # (1 x state_dim)
             batched_actions_representation = self._action_representation_module(
-                available_action_space.actions_batch.to(batched_observation)
+                available_action_space.actions_batch.to(batched_subjective_state)
             ).unsqueeze(
                 0
             )  # (1 x number of actions x action_dim)
 
             q_values = self._Q.get_q_values(
-                state_batch=batched_observation, 
-                action_batch=batched_actions_representation
+                state_batch=batched_subjective_state,
+                action_batch=batched_actions_representation,
             )  # (1 x number of actions)
             # this does a forward pass since all avaialble
             # actions are already stacked together
@@ -171,7 +172,7 @@ class DeepTDLearning(PolicyLearner):
 
         assert self._exploration_module is not None
         return self._exploration_module.act(
-            observation=observation,
+            subjective_state=subjective_state,
             action_space=available_action_space,
             exploit_action=exploit_action,
             values=q_values,

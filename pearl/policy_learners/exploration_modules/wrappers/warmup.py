@@ -13,7 +13,7 @@ import torch
 import random
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -42,7 +42,7 @@ class Warmup(ExplorationModuleWrapper):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
@@ -58,7 +58,7 @@ class Warmup(ExplorationModuleWrapper):
                 )
         else:
             action = self.exploration_module.act(
-                observation=observation,
+                subjective_state=subjective_state,
                 action_space=action_space,
                 values=values,
                 exploit_action=exploit_action,

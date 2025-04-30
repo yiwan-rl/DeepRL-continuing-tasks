@@ -14,15 +14,15 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.api.observation import Observation
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
 from pearl.replay_buffers.replay_buffer import ReplayBuffer
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 
 class PolicyLearner(torch.nn.Module, ABC):
@@ -91,7 +91,7 @@ class PolicyLearner(torch.nn.Module, ABC):
     @abstractmethod
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:

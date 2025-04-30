@@ -24,18 +24,18 @@ class OffPolicyReplayBuffer(TensorBasedReplayBuffer):
     # TODO: assumes action space is gym action space with one-hot encoding
     def push(
         self,
-        state: Observation,
+        obs: Observation,
         action: Action,
         reward: Reward,
-        next_state: Observation,
+        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:
         self.add(
-            state=state,
+            obs=obs,
             action=action,
             reward=reward,
-            next_state=next_state,
+            next_obs=next_obs,
             terminated=terminated,
             truncated=truncated,
         )

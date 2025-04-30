@@ -21,7 +21,7 @@ from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC
 from pearl.api.action import Action
 
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.neural_networks.common.utils import (
     update_target_network,
 )
@@ -116,7 +116,7 @@ class ActorCriticBase(PolicyLearner):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
@@ -133,6 +133,7 @@ class ActorCriticBase(PolicyLearner):
         an action that strikes a balance between exploration and exploitation.
 
         Args:
+            subjective_state (SubjectiveState): Subjective state of the agent.
             available_action_space (ActionSpace): Set of eligible actions.
             exploit (bool, optional): Determines the mode of operation. If True, the function
             operates in exploit mode. If False, it operates in explore mode. Defaults to False.
@@ -147,12 +148,12 @@ class ActorCriticBase(PolicyLearner):
             self._current_steps += 1
         with torch.no_grad():
             if self._is_action_continuous:
-                exploit_action = self._actor.sample_action(observation)
+                exploit_action = self._actor.sample_action(subjective_state)
                 action_probabilities = None
             else:
                 assert isinstance(available_action_space, DiscreteActionSpace)
                 action_probabilities = self._actor.get_policy_distribution(
-                    state_batch=observation,
+                    state_batch=subjective_state,
                 )
                 # (action_space_size)
                 exploit_action_index = torch.argmax(action_probabilities)
@@ -167,7 +168,7 @@ class ActorCriticBase(PolicyLearner):
         return self._exploration_module.act(
             exploit_action=exploit_action,
             action_space=available_action_space,
-            observation=observation,
+            subjective_state=subjective_state,
             values=action_probabilities,
         )
 

@@ -14,7 +14,7 @@ import torch
 
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.common.uniform_exploration_base import (
     UniformExplorationBase,
 )
@@ -50,7 +50,7 @@ class EGreedyExploration(UniformExplorationBase):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         exploit_action: Optional[Action],
         values: Optional[torch.Tensor] = None,
