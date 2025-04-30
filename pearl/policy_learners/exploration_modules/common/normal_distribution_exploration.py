@@ -32,7 +32,7 @@ class NormalDistributionExploration(ExplorationModule):
     def __init__(
         self,
         mean: float = 0.0,
-        std_dev: float|torch.Tensor = 1.0,
+        std_dev: float | torch.Tensor = 1.0,
     ) -> None:
         super(NormalDistributionExploration, self).__init__()
         self._mean = mean

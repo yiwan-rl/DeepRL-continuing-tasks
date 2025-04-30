@@ -110,9 +110,11 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
         if self._count == self.pos or self._indices is None:
             self.init_indices()
             self._count = 0
+        assert self._indices is not None
         batch_inds = self._indices[self._count : self._count + batch_size]
 
         batch = OnPolicyTransitionBatch(
+            # pyre-fixme
             state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],
@@ -123,6 +125,7 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
                 if self.next_observations is not None
                 else None
             ),
+            # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
             action_log_probs=self.action_log_probs[batch_inds, :],
             gae=self.gae[batch_inds, :],
             lam_return=self.lam_return[batch_inds, :],
@@ -142,6 +145,7 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
         """
 
         batch = TransitionBatch(
+            # pyre-fixme
             state=self.observations[: self.pos, :],
             action=self.actions[: self.pos, :],
             reward=self.rewards[: self.pos],

@@ -14,10 +14,7 @@ from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
 from pearl.neural_networks.common.utils import update_target_network
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
+from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     EnsembleQValueNetwork,
     QValueNetwork,
@@ -32,6 +29,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.critic_utils import (
     ensemble_critic_action_value_loss,
 )
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
 
 
@@ -56,11 +54,11 @@ class TD3(DeepDeterministicPolicyGradient):
         training_rounds: int = 1,
         batch_size: int = 256,
         actor_update_freq: int = 2,
-        actor_update_noise: float|torch.Tensor = 0.2,
+        actor_update_noise: float | torch.Tensor = 0.2,
         actor_update_noise_clip: float = 0.5,
         ensemble_critic_size: int = 2,  # for twin critic, default choice is 2
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(TD3, self).__init__(
             exploration_module=exploration_module,
@@ -86,8 +84,12 @@ class TD3(DeepDeterministicPolicyGradient):
         # The actor and the critic updates are arranged in the following way
         # for the same reason as in the comment "If the history summarization module ..."
         # in the learn_batch function in actor_critic_base.py.
-        if isinstance(self.reward_centering, TD_RC) and self.reward_centering.initialize_reward_rate == True:
+        if (
+            isinstance(self.reward_centering, TD_RC)
+            and self.reward_centering.initialize_reward_rate == True
+        ):
             self.reward_rate.data.fill_(batch.reward.mean())
+            # pyre-fixme
             self.reward_centering.initialize_reward_rate = False
         report = {}
         # delayed actor update

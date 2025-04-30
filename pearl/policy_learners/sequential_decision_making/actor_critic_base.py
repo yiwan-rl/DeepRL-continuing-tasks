@@ -16,19 +16,14 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.api.action import Action
 
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
-from pearl.neural_networks.common.utils import (
-    update_target_network,
-)
+from pearl.neural_networks.common.utils import update_target_network
 from pearl.neural_networks.common.value_networks import ValueNetwork
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
+from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
 )
@@ -38,6 +33,7 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
 )
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 from torch import nn, optim
 
@@ -74,7 +70,7 @@ class ActorCriticBase(PolicyLearner):
         batch_size: int = 256,
         is_action_continuous: bool = False,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(ActorCriticBase, self).__init__(
             is_action_continuous=is_action_continuous,
@@ -109,8 +105,8 @@ class ActorCriticBase(PolicyLearner):
             self._critic_target: nn.Module = copy.deepcopy(self._critic)
 
         self._discount_factor = discount_factor
-        self._actor_learning_rate = self._actor_optimizer.param_groups[0]["lr"]
-        self._critic_learning_rate = self._critic_optimizer.param_groups[0]["lr"]
+        self._actor_learning_rate: float = self._actor_optimizer.param_groups[0]["lr"]
+        self._critic_learning_rate: float = self._critic_optimizer.param_groups[0]["lr"]
         self._current_steps = 0
         self._test_time = False
 
@@ -200,7 +196,8 @@ class ActorCriticBase(PolicyLearner):
         if isinstance(self.reward_centering, TD_RC):
             if self.reward_centering.initialize_reward_rate == True:
                 self.reward_rate.data.fill_(batch.reward.mean())
-                self.reward_centering.initialize_reward_rate = False
+                # pyre-fixme
+                self.reward_centering.initialize_reward_rate: bool = False
         actor_loss = self._actor_loss(batch)
         self._actor_optimizer.zero_grad()
         """

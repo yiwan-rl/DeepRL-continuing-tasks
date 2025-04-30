@@ -14,9 +14,7 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.neural_networks.common.value_networks import (
-    ValueNetwork,
-)
+from pearl.neural_networks.common.value_networks import ValueNetwork
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     action_scaling,
     ActorNetwork,
@@ -74,7 +72,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
         clip_value: bool = False,
         reprocessing_buffer: bool = True,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         if exploration_module is None:
             if is_action_continuous:
@@ -139,6 +137,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
             r_thelta, min=1.0 - self._epsilon, max=1.0 + self._epsilon
         )  # shape (batch_size, 1)
         if self._norm_adv:
+            # pyre-fixme
             adv = (batch.gae - batch.gae.mean()) / (batch.gae.std() + 1e-8)
             loss = torch.mean(-torch.min(r_thelta * adv, clip * adv))
         else:
@@ -177,8 +176,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
         loss.backward()
         if self._max_grad_norm is not None:
             nn.utils.clip_grad_norm_(
-                list(self._actor.parameters())
-                + list(self._critic.parameters()),
+                list(self._actor.parameters()) + list(self._critic.parameters()),
                 self._max_grad_norm,
             )
         self._actor_optimizer.step()
@@ -194,10 +192,15 @@ class ProximalPolicyOptimization(ActorCriticBase):
         if isinstance(self.reward_centering, RVI_RC):
             freq = self.reward_centering.ref_states_update_freq
             if self._training_steps % freq == 0:
-                batch = replay_buffer.create_f_batch(batch_size=self._batch_size, last_k_steps=freq)
+                # pyre-fixme
+                batch = replay_buffer.create_f_batch(
+                    batch_size=self._batch_size, last_k_steps=freq
+                )
+                # pyre-fixme
                 self.reward_centering.f_batch = self.preprocess_batch(batch)
         if self._anneal_lr:
             assert self._max_steps is not None
+            # pyre-fixme
             frac = 1.0 - (self._current_steps - 1.0) / self._max_steps
             self._actor_optimizer.param_groups[0]["lr"] = (
                 frac * self._actor_learning_rate
@@ -207,6 +210,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
             )
             if isinstance(self.reward_centering, TD_RC):
                 self.reward_centering.optimizer.param_groups[0]["lr"] = (
+                    # pyre-fixme
                     frac * self.reward_centering.init_reward_rate_learning_rate
                 )
         if len(replay_buffer) == 0:
@@ -292,8 +296,9 @@ class ProximalPolicyOptimization(ActorCriticBase):
         if isinstance(self.reward_centering, TD_RC):
             if self.reward_centering.initialize_reward_rate == True:
                 self.reward_rate.data.fill_(batch.reward.mean())
+                # pyre-fixme
                 self.reward_centering.initialize_reward_rate = False
-
+            # pyre-fixme
             self.reward_centering.optimizer.zero_grad()
             td_errors = (
                 reward
@@ -305,6 +310,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
             )  # shape (batch_size, 1)
             reward_rate_error = td_errors.pow(2).mean()
             reward_rate_error.backward()
+            # pyre-fixme
             self.reward_centering.optimizer.step()
         td_errors = (
             reward
@@ -323,9 +329,14 @@ class ProximalPolicyOptimization(ActorCriticBase):
         replay_buffer.gae[-1] = td_errors[-1]
 
         for i in range(replay_buffer.pos - 2, -1, -1):
+            # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
             replay_buffer.gae[i] = (
-                td_errors[i] + discounting[i] * replay_buffer.gae[i + 1]
+                # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
+                td_errors[i]
+                # pyre-fixme
+                + discounting[i] * replay_buffer.gae[i + 1]
             )  # shape (1)
+        # pyre-fixme
         replay_buffer.lam_return = replay_buffer.gae + state_values
         replay_buffer.value = state_values
         if self._norm_return:

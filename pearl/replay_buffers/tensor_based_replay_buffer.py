@@ -7,9 +7,7 @@
 
 # pyre-strict
 
-import random
-from collections import deque
-from typing import Deque, List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
 
@@ -31,23 +29,29 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         super(TensorBasedReplayBuffer, self).__init__()
         self.capacity = capacity
         self.observations: Optional[np.ndarray] = None
+        self.actions: Optional[np.ndarray] = None
+        self.rewards: Optional[np.ndarray] = None
+        self.terminateds: Optional[np.ndarray] = None
+        self.truncateds: Optional[np.ndarray] = None
+        self.next_observations: Optional[np.ndarray] = None
         self.pos = 0
         self.full = False
         self._device_for_batches: torch.device = get_default_device()
 
     def add(
         self,
-        obs,
-        action,
-        reward,
-        terminated,
-        truncated,
-        next_obs,
+        obs: Observation,
+        action: Action,
+        reward: Reward,
+        terminated: bool,
+        truncated: bool,
+        next_obs: Observation,
     ) -> None:
         if self.capacity == 0:
             return
         if self.observations is None:
             self.observations = np.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
+            # pyre-fixme
             self.actions = np.zeros((self.capacity,) + action.shape, dtype=action.dtype)
             self.rewards = np.zeros(self.capacity, dtype=np.float32)
             self.terminateds = np.zeros(self.capacity, dtype=bool)
@@ -55,6 +59,7 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             self.next_observations = np.zeros(
                 (self.capacity,) + next_obs.shape, dtype=next_obs.dtype
             )
+        # pyre-fixme
         self.observations[self.pos] = obs
         self.actions[self.pos] = action
         self.rewards[self.pos] = reward
@@ -105,6 +110,7 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             max(self.pos - last_k_steps, 0), self.pos, size=batch_size
         )
         batch = TransitionBatch(
+            # pyre-fixme
             state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],
@@ -142,9 +148,9 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             batch_inds = np.random.randint(0, self.capacity, size=batch_size)
         else:
             batch_inds = np.random.randint(0, self.pos, size=batch_size)
-        # print(self.states)
-        # print(self.actions[batch_inds, :])
+
         batch = TransitionBatch(
+            # pyre-fixme
             state=self.observations[batch_inds, :],
             action=self.actions[batch_inds, :],
             reward=self.rewards[batch_inds],

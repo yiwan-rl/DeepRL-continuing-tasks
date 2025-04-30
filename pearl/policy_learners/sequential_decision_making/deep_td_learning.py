@@ -15,8 +15,6 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
@@ -30,6 +28,7 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
 )
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 from torch import optim
@@ -55,7 +54,7 @@ class DeepTDLearning(PolicyLearner):
         target_update_freq: int = 10,
         soft_update_tau: float = 0.1,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
         **kwargs: Any,
     ) -> None:
         """Constructs a DeepTDLearning based policy learner. DeepTDLearning is the base class
@@ -202,8 +201,12 @@ class DeepTDLearning(PolicyLearner):
         Returns:
             Dict[str, Any]: dictionary with loss as the mean bellman error (across the batch).
         """
-        if isinstance(self.reward_centering, TD_RC) and self.reward_centering.initialize_reward_rate == True:
+        if (
+            isinstance(self.reward_centering, TD_RC)
+            and self.reward_centering.initialize_reward_rate == True
+        ):
             self.reward_rate.data.fill_(batch.reward.mean())
+            # pyre-fixme
             self.reward_centering.initialize_reward_rate = False
         state_batch = batch.state  # (batch_size x state_dim)
         action_batch = batch.action  # (batch_size x action_dim)
@@ -230,7 +233,8 @@ class DeepTDLearning(PolicyLearner):
 
         criterion = torch.nn.MSELoss()
         bellman_loss = criterion(
-            state_action_values + self.reward_rate, expected_state_action_values.detach()
+            state_action_values + self.reward_rate,
+            expected_state_action_values.detach(),
         )
         loss = bellman_loss
 
@@ -268,8 +272,5 @@ class DeepTDLearning(PolicyLearner):
         Returns:
             f_value (Tensor): The value function for the batch of transitions.
         """
-        qs = self._Q.get_q_values(
-            state_batch=batch.state, 
-            action_batch=batch.action
-        )
+        qs = self._Q.get_q_values(state_batch=batch.state, action_batch=batch.action)
         return torch.mean(qs).detach()

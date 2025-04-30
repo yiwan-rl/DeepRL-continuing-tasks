@@ -64,7 +64,9 @@ class EGreedyExploration(UniformExplorationBase):
         ):
             if self.time_step <= self.warmup_steps:
                 self.curr_epsilon = (
+                    # pyre-fixme[58]: `*` is not supported for operand types
                     self.start_epsilon
+                    # pyre-fixme[58]: `-` is not supported for operand types
                     + (self.end_epsilon - self.start_epsilon)
                     * self.time_step
                     / self.warmup_steps

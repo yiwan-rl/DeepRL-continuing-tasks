@@ -10,6 +10,8 @@
 import typing
 from typing import Any, Dict, Optional
 
+import numpy as np
+
 import torch
 from pearl.api.action import Action
 from pearl.api.action_result import ActionResult
@@ -55,7 +57,6 @@ class PearlAgent(Agent):
         self.device: torch.device = get_pearl_device(device_id)
 
         self.replay_buffer: ReplayBuffer = replay_buffer
-
         # set here so replay_buffer and policy_learner are in sync
         self.replay_buffer._is_action_continuous = (
             self.policy_learner._is_action_continuous
@@ -74,9 +75,8 @@ class PearlAgent(Agent):
 
     def act(self, exploit: bool = False) -> Action:
         assert self._action_space is not None
-
         action = self.policy_learner.act(
-            torch.as_tensor(self._latest_observation).to(self.device), self._action_space, exploit=exploit  # pyre-fixme[6]
+            torch.as_tensor(np.array(self._latest_observation)).to(self.device), self._action_space, exploit=exploit  # pyre-fixme[6]
         )
 
         self._latest_action = action
@@ -91,9 +91,7 @@ class PearlAgent(Agent):
         self,
         action_result: ActionResult,
     ) -> None:
-        assert self._latest_observation is not None
         assert self._latest_action is not None
-        assert self._action_space is not None
         if isinstance(self.policy_learner.reward_centering, MA_RC):
             ma_rate = self.policy_learner.reward_centering.ma_rate
             self.policy_learner.reward_rate = (
@@ -101,6 +99,8 @@ class PearlAgent(Agent):
                 + action_result.reward * (1 - ma_rate)
             )
 
+        assert self._latest_observation is not None
+        assert self._latest_action is not None
         self.replay_buffer.push(
             obs=self._latest_observation,
             action=self._latest_action.cpu().numpy(),

@@ -8,7 +8,7 @@
 # pyre-strict
 
 import logging
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 from pearl.api.action import Action
@@ -78,6 +78,7 @@ class GymEnvironment(Environment):
         self.env: gym.Env = env
         self._action_space: ActionSpace = _get_pearl_space(
             gym_space=(
+                # pyre-fixme
                 self.env.augmented_action_space
                 if hasattr(self.env, "augmented_action_space")
                 else self.env.action_space
@@ -125,6 +126,7 @@ class GymEnvironment(Environment):
         effective_action = _get_gym_action(
             pearl_action=action,
             gym_space=(
+                # pyre-fixme
                 self.env.augmented_action_space
                 if hasattr(self.env, "augmented_action_space")
                 else self.env.action_space

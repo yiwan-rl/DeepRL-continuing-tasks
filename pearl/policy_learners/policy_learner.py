@@ -21,6 +21,7 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
 from pearl.replay_buffers.replay_buffer import ReplayBuffer
+from pearl.replay_buffers.tensor_based_replay_buffer import TensorBasedReplayBuffer
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
@@ -50,7 +51,7 @@ class PolicyLearner(torch.nn.Module, ABC):
         training_rounds: int = 100,
         batch_size: int = 1,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
         **options: Any,
     ) -> None:
         super(PolicyLearner, self).__init__()
@@ -65,6 +66,7 @@ class PolicyLearner(torch.nn.Module, ABC):
         self._is_action_continuous = is_action_continuous
         self.reward_rate = reward_rate
         self.reward_centering = reward_centering
+
     @property
     def batch_size(self) -> int:
         return self._batch_size
@@ -118,8 +120,13 @@ class PolicyLearner(torch.nn.Module, ABC):
         if isinstance(self.reward_centering, RVI_RC):
             freq = self.reward_centering.ref_states_update_freq
             if self._training_steps % freq == 0:
-                batch = replay_buffer.create_f_batch(batch_size=self._batch_size, last_k_steps=freq)
+                assert isinstance(replay_buffer, TensorBasedReplayBuffer)
+                batch = replay_buffer.create_f_batch(
+                    batch_size=self._batch_size, last_k_steps=freq
+                )
+                # pyre-fixme
                 self.reward_centering.f_batch = self.preprocess_batch(batch)
+            # pyre-fixme
             self.reward_rate = self.compute_f_value(self.reward_centering.f_batch)
         report = {}
         for _ in range(self._training_rounds):

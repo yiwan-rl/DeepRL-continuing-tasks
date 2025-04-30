@@ -7,10 +7,10 @@
 
 # pyre-strict
 
+import random
 from typing import Optional
 
 import torch
-import random
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
@@ -72,9 +72,11 @@ class Warmup(ExplorationModuleWrapper):
     def set_test_time_false(self) -> None:
         self._test_time = False
         if hasattr(self.exploration_module, "set_test_time_false"):
+            # pyre-fixme
             self.exploration_module.set_test_time_false()
 
     def set_test_time_true(self) -> None:
         self._test_time = True
         if hasattr(self.exploration_module, "set_test_time_true"):
+            # pyre-fixme
             self.exploration_module.set_test_time_true()
