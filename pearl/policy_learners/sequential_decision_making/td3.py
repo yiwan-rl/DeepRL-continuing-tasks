@@ -132,13 +132,22 @@ class TD3(DeepDeterministicPolicyGradient):
 
             # sample clipped gaussian noise
             if isinstance(self._actor_update_noise, torch.Tensor):
-                self._actor_update_noise = self._actor_update_noise.to(batch.state.device)
-                tmp = self._actor_update_noise.repeat(next_action.size(0), 1)
-                assert tmp.size() == next_action.size()
-            noise = torch.normal(
-                mean=torch.zeros(next_action.size(), device=batch.device),
-                std=tmp if isinstance(self._actor_update_noise, torch.Tensor) else torch.ones(next_action.size(), device=batch.device) * self._actor_update_noise,
-            )
+                self._actor_update_noise = self._actor_update_noise.to(
+                    batch.state.device
+                )
+                noise = torch.normal(
+                    mean=torch.zeros(next_action.size(), device=batch.device),
+                    # pyre-fixme
+                    std=self._actor_update_noise.repeat(next_action.size(0), 1),
+                )
+            else:
+                noise = torch.normal(
+                    mean=torch.zeros(next_action.size(), device=batch.device),
+                    std=(
+                        torch.ones(next_action.size(), device=batch.device)
+                        * self._actor_update_noise
+                    ),
+                )
 
             noise = torch.clamp(
                 noise,
