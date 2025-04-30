@@ -15,7 +15,7 @@ import torch
 
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
     ExplorationType,
@@ -39,7 +39,7 @@ class ScoreExplorationBase(ExplorationModule):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: Optional[torch.Tensor] = None,
         action_availability_mask: Optional[torch.Tensor] = None,
@@ -48,6 +48,8 @@ class ScoreExplorationBase(ExplorationModule):
     ) -> Action:
         """
         Args:
+            subjective_state is in shape of (batch_size, feature_size) or (feature_size)
+            for a single transition
             values is in shape of (batch_size, action_count) or (action_count)
         Returns:
             return shape(batch_size,)
@@ -60,7 +62,7 @@ class ScoreExplorationBase(ExplorationModule):
             return exploit_action
         assert values is not None
         scores = self.get_scores(
-            observation=observation,
+            subjective_state=subjective_state,
             action_space=action_space,
             values=values,
             representation=representation,
@@ -91,7 +93,7 @@ class ScoreExplorationBase(ExplorationModule):
     @abstractmethod
     def get_scores(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: torch.Tensor,
         exploit_action: Optional[Action] = None,
@@ -101,6 +103,8 @@ class ScoreExplorationBase(ExplorationModule):
         Get the scores for each action.
 
         Args:
+            subjective_state is in shape of (batch_size, feature_size) or (feature_size)
+            for a single transition
             values is in shape of (batch_size, action_count) or (action_count)
         Returns:
             return shape(batch_size, action_count)

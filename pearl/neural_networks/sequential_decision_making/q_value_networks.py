@@ -120,6 +120,78 @@ class VanillaQValueNetwork(QValueNetwork):
         return self._action_dim
 
 
+class VanillaAgentResetQValueNetwork(QValueNetwork):
+    """
+    A vanilla version of state-action value (Q-value) network.
+    It leverages the vanilla implementation of value networks by
+    using the state-action pair as the input for the value network.
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        hidden_dims: List[int],
+        use_layer_norm: bool = False,
+    ) -> None:
+        super(VanillaAgentResetQValueNetwork, self).__init__()
+        self._state_dim: int = state_dim
+        self._action_dim: int = action_dim
+        self._model: nn.Module = mlp_block(
+            input_dim=state_dim + action_dim - 1,
+            hidden_dims=hidden_dims,
+            output_dim=1,
+            use_layer_norm=use_layer_norm,
+        )
+        self.reset_value = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self._model(x)
+
+    def get_q_values(
+        self,
+        state_batch: Tensor,  # (batch_size x state_dim)
+        action_batch: Tensor,  # (batch_size x number of query actions x action_dim) or (batch_size x action_dim)
+    ) -> Tensor:
+        assert len(action_batch.shape) == 2 or len(action_batch.shape) == 3
+        if len(action_batch.shape) == 2:
+            x = torch.cat(
+                [state_batch, action_batch[:, :-1]], dim=-1
+            )  # (batch_size x (state_dim + action_dim - 1))
+            reset_prob = (action_batch[:, -1] + 0.4) / 0.8  # (batch_size)
+            # print(reset_prob.max())
+            rtv = (1 - reset_prob) * self.forward(x).view(
+                -1
+            ) + reset_prob * self.reset_value  # (batch_size)
+            # print(self.reset_value, rtv.mean())
+            return rtv  # (batch_size)
+        state_batch = torch.repeat_interleave(
+            state_batch.unsqueeze(1), action_batch.shape[1], dim=1
+        )  # (batch_size x number_of_actions_to_query x state_dim)
+        x = torch.cat(
+            [state_batch, action_batch[:, :-1]], dim=-1
+        )  # (batch_size x number_of_actions_to_query x (state_dim + action_dim))
+        x = x.view(-1, x.shape[-1])
+        output = self.forward(x).view(
+            state_batch.shape[0], action_batch.shape[1]
+        )  # (batch_size x number_of_actions_to_query)
+        reset_prob = (
+            action_batch[:, :, -1] + 0.4
+        ) / 0.8  # (batch_size x number of query actions)
+        output = (
+            1 - reset_prob
+        ) * output + reset_prob * self.reset_value  # (batch_size x number of query actions)
+        return output
+
+    @property
+    def state_dim(self) -> int:
+        return self._state_dim
+
+    @property
+    def action_dim(self) -> int:
+        return self._action_dim
+
+
 class VanillaQValueMultiHeadNetwork(QValueNetwork):
     """
     A vanilla version of state-action value (Q-value) multi-head network.

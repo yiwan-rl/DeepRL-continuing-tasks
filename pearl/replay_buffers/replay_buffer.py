@@ -9,6 +9,8 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 import torch
 from pearl.api.action import Action
 from pearl.api.observation import Observation
@@ -48,10 +50,10 @@ class ReplayBuffer(ABC):
     @abstractmethod
     def push(
         self,
-        observation: Observation,
-        action: Action,
+        obs: Observation,
+        action: np.ndarray,
         reward: Reward,
-        next_state: Observation,
+        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:

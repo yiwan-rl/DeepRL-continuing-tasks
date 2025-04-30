@@ -8,7 +8,7 @@
 # pyre-strict
 
 import logging
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 from pearl.api.action import Action
@@ -78,6 +78,7 @@ class GymEnvironment(Environment):
         self.env: gym.Env = env
         self._action_space: ActionSpace = _get_pearl_space(
             gym_space=(
+                # pyre-fixme
                 self.env.augmented_action_space
                 if hasattr(self.env, "augmented_action_space")
                 else self.env.action_space
@@ -125,6 +126,7 @@ class GymEnvironment(Environment):
         effective_action = _get_gym_action(
             pearl_action=action,
             gym_space=(
+                # pyre-fixme
                 self.env.augmented_action_space
                 if hasattr(self.env, "augmented_action_space")
                 else self.env.action_space
@@ -148,22 +150,11 @@ class GymEnvironment(Environment):
             raise ValueError(
                 f"Unexpected action result from Gym (expected 4 or 5 elements): {gym_action_result}"
             )
-        if "cost" in info.keys():
-            cost = info["cost"]
-        else:
-            cost = None
-
-        if "available_action_space" in info.keys():
-            available_action_space = info["available_action_space"]
-        else:
-            available_action_space = None
 
         if observation.dtype == np.float64:
             observation = observation.astype(np.float32)
         if isinstance(reward, np.float64):
             reward = reward.astype(np.float32)
-        if isinstance(cost, np.float64):
-            cost = cost.astype(np.float32)
 
         return ActionResult(
             observation=observation,
@@ -171,8 +162,6 @@ class GymEnvironment(Environment):
             terminated=terminated,
             truncated=truncated,
             info=info,
-            cost=cost,
-            available_action_space=available_action_space,
         )
 
     def render(self) -> None:

@@ -6,12 +6,10 @@
 
 # pyre-strict
 
+from .residual_wrapper import ResidualWrapper
 from .value_networks import CNNValueNetwork, ValueNetwork, VanillaValueNetwork
 
 __all__ = [
-    "Ensemble",
-    "EpistemicNeuralNetwork",
-    "MLPWithPrior",
     "ResidualWrapper",
     "ValueNetwork",
     "CNNValueNetwork",

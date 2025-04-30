@@ -13,7 +13,7 @@ import torch
 
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -30,7 +30,7 @@ class PropensityExploration(ExplorationModule):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: Optional[torch.Tensor] = None,  # (action_space_size)
         exploit_action: Optional[Action] = None,

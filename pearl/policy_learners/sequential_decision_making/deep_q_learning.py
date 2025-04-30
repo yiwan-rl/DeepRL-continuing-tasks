@@ -10,7 +10,6 @@
 from typing import Any, Optional
 
 import torch
-from torch import optim
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
@@ -18,7 +17,6 @@ from pearl.action_representation_modules.action_representation_module import (
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -26,6 +24,7 @@ from pearl.policy_learners.sequential_decision_making.deep_td_learning import (
     DeepTDLearning,
 )
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import optim
 
 
@@ -46,7 +45,7 @@ class DeepQLearning(DeepTDLearning):
         target_update_freq: int = 10,
         soft_update_tau: float = 0.75,  # a value of 1 indicates no soft updates
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
         **kwargs: Any,
     ) -> None:
         """Constructs a DeepQLearning policy learner. DeepQLearning is based on DeepTDLearning
@@ -103,7 +102,7 @@ class DeepQLearning(DeepTDLearning):
             reward_centering=reward_centering,
             **kwargs,
         )
-        self.all_action_batch = None
+        self.all_action_batch: Optional[torch.Tensor] = None
 
     @torch.no_grad()
     def get_next_state_values(
@@ -124,16 +123,20 @@ class DeepQLearning(DeepTDLearning):
         next_state = batch.next_state  # (batch_size x state_dim)
         assert next_state is not None
 
-        if self.all_action_batch is None or self.all_action_batch.shape[0] != next_state.shape[0]:
+        if (
+            self.all_action_batch is None
+            or self.all_action_batch.shape[0] != next_state.shape[0]
+        ):
             self.all_action_batch = self._action_representation_module(
-                self._action_space.actions_batch.unsqueeze(0).repeat(
-                    next_state.shape[0], 1, 1
-                ).to(self.device)
+                self._action_space.actions_batch.unsqueeze(0)
+                .repeat(next_state.shape[0], 1, 1)
+                .to(self.device)
             )
 
         # Get Q values for each (state, action), where action \in {available_actions}
         next_state_action_values = self._Q_target.get_q_values(
             state_batch=next_state,
+            # pyre-fixme
             action_batch=self.all_action_batch,
         )  # (batch_size x action_space_size)
 

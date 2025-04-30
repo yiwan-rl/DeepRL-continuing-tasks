@@ -6,14 +6,14 @@
 
 # The code is copied from https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/atari_wrappers.py
 
-from typing import Any, Dict, SupportsFloat, Tuple
+from typing import Any, Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
 
 
 AtariResetReturn = Tuple[np.ndarray, Dict[str, Any]]
-AtariStepReturn = Tuple[np.ndarray, SupportsFloat, bool, bool, Dict[str, Any]]
+AtariStepReturn = Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]
 
 try:
     import cv2
@@ -23,7 +23,7 @@ except ImportError:
     cv2 = None  # type: ignore[assignment]
 
 
-class NoopResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class NoopResetEnv(gym.Wrapper):
     """
     Sample initial states by taking random number of no-ops on reset.
     No-op is assumed to be action 0.
@@ -55,7 +55,7 @@ class NoopResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         return obs, info
 
 
-class FireResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class FireResetEnv(gym.Wrapper):
     """
     Take action on reset for environments that are fixed until firing.
 
@@ -78,7 +78,7 @@ class FireResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         return obs, {}
 
 
-class EpisodicLifeEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class EpisodicLifeEnv(gym.Wrapper):
     """
     Make end-of-life == end-of-episode, but only reset on true game over.
     Done by DeepMind for the DQN and co. since it helps value estimation.
@@ -129,7 +129,7 @@ class EpisodicLifeEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         return obs, info
 
 
-class MaxAndSkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class MaxAndSkipEnv(gym.Wrapper):
     """
     Return only every ``skip``-th frame (frameskipping)
     and return the max between the two last frames.
@@ -163,6 +163,7 @@ class MaxAndSkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         """
         total_reward = 0.0
         terminated = truncated = False
+        info = {}
         for i in range(self._skip):
             obs, reward, terminated, truncated, info = self.env.step(action)
             done = terminated or truncated

@@ -7,17 +7,12 @@
 
 # pyre-strict
 
-from .atari_wrappers import (
-    EpisodicLifeEnv,
-    FireResetEnv,
-    MaxAndSkipEnv,
-    NoopResetEnv,
-)
+from .atari_wrappers import EpisodicLifeEnv, FireResetEnv, MaxAndSkipEnv, NoopResetEnv
 from .halfcheetah_wrapper import HalfCheetahWrapper  # noqa
-from .swimmer_wrapper import SwimmerWrapper  # noqa
 from .pusher_wrapper import PusherWrapper  # noqa
 from .reacher_wrapper import ReacherWrapper  # noqa
-from .reset_wrapper import AgentResetWrapper, ResetWrapper  # noqa
+from .reset_wrapper import AgentResetWrapper, EpisodicWrapper, ResetWrapper  # noqa
+from .swimmer_wrapper import SwimmerWrapper  # noqa
 
 __all__ = [
     "AgentResetWrapper",
@@ -30,4 +25,5 @@ __all__ = [
     "EpisodicLifeEnv",
     "MaxAndSkipEnv",
     "SwimmerWrapper",
+    "EpisodicWrapper",
 ]

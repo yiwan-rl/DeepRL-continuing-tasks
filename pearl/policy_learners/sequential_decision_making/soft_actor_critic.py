@@ -14,10 +14,7 @@ from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
 from pearl.api.action_space import ActionSpace
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
+from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     EnsembleQValueNetwork,
     QValueNetwork,
@@ -32,6 +29,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.critic_utils import (
     ensemble_critic_action_value_loss,
 )
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
 
 
@@ -63,7 +61,7 @@ class SoftActorCritic(ActorCriticBase):
         ensemble_critic_size: int = 2,
         target_entropy_scale: float = 0.89,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(SoftActorCritic, self).__init__(
             use_actor_target=False,
@@ -105,10 +103,12 @@ class SoftActorCritic(ActorCriticBase):
                 [self._log_entropy], lr=self._critic_learning_rate, eps=1e-4
             )
             self.register_buffer("_entropy_coef", torch.exp(self._log_entropy).detach())
-            print(action_representation_module.max_number_actions)
             self.register_buffer(
                 "_target_entropy",
-                -target_entropy_scale * torch.log(1.0 / torch.tensor(action_representation_module.max_number_actions)),
+                -target_entropy_scale
+                * torch.log(
+                    torch.tensor(1.0 / action_representation_module.max_number_actions)
+                ),
             )
         else:
             self.register_buffer("_entropy_coef", torch.tensor(entropy_coef))
@@ -194,11 +194,14 @@ class SoftActorCritic(ActorCriticBase):
 
     def _actor_loss(self, batch: TransitionBatch) -> torch.Tensor:
         state_batch = batch.state  # (batch_size x state_dim)
-        if self.all_action_batch is None or self.all_action_batch.shape[0] != state_batch.shape[0]:
+        if (
+            self.all_action_batch is None
+            or self.all_action_batch.shape[0] != state_batch.shape[0]
+        ):
             self.all_action_batch = self._action_representation_module(
-                self._action_space.actions_batch.unsqueeze(0).repeat(
-                    state_batch.shape[0], 1, 1
-                ).to(self.device)
+                self._action_space.actions_batch.unsqueeze(0)
+                .repeat(state_batch.shape[0], 1, 1)
+                .to(self.device)
             )
         # get q values of (states, all actions) from twin critics
         qs = self._critic.get_q_values(
@@ -213,7 +216,7 @@ class SoftActorCritic(ActorCriticBase):
         )  # (batch_size x action_space_size)
         self._action_probs_cache = new_policy_dist
         self._action_log_probs_cache = torch.log(new_policy_dist + 1e-8)
-        
+
         loss = (
             new_policy_dist * (self._entropy_coef * self._action_log_probs_cache - q)
         ).mean()

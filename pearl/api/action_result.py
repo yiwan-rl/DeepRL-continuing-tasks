@@ -10,8 +10,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from pearl.api.action_space import ActionSpace
-
 from pearl.api.observation import Observation
 
 from pearl.api.reward import Reward
@@ -23,9 +21,7 @@ class ActionResult:
     reward: Reward
     terminated: bool
     truncated: bool
-    info: Optional[Dict[str, Any]] = None
-    cost: Optional[float] = None
-    available_action_space: Optional[ActionSpace] = None
+    info: Dict[str, Any]
 
     @property
     def done(self) -> bool:

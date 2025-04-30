@@ -12,7 +12,7 @@ from typing import Optional
 import torch
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
+from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules import ExplorationModule
 from pearl.replay_buffers.replay_buffer import ReplayBuffer
 
@@ -30,7 +30,7 @@ class ExplorationModuleWrapper(ExplorationModule):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         action_space: ActionSpace,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
@@ -38,7 +38,7 @@ class ExplorationModuleWrapper(ExplorationModule):
         representation: Optional[torch.nn.Module] = None,
     ) -> Action:
         return self.exploration_module.act(
-            observation,
+            subjective_state,
             action_space,
             values,
             exploit_action,

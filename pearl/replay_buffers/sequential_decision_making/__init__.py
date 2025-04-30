@@ -10,6 +10,6 @@ from .off_policy_replay_buffer import OffPolicyReplayBuffer
 from .on_policy_replay_buffer import OnPolicyReplayBuffer
 
 __all__ = [
+    "OffPolicyReplayBuffer",
     "OnPolicyReplayBuffer",
-    "OffPolicyReplayBuffer"
 ]

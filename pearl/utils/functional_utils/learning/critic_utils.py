@@ -7,22 +7,8 @@
 
 # pyre-strict
 
-from typing import cast, List, Optional, Type, Union
-
 import torch
 import torch.nn as nn
-
-from pearl.neural_networks.common.utils import xavier_init_weights
-from pearl.neural_networks.common.value_networks import (
-    ValueNetwork,
-    VanillaValueNetwork,
-)
-
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    EnsembleQValueNetwork,
-    QValueNetwork,
-    VanillaQValueNetwork,
-)
 
 """
 This file is a collection of some functions used to create and update critic networks
@@ -34,65 +20,6 @@ as well as compute optimization losses.
 # TODO 2: see if we can add functions for updating the target networks and computing losses
 # in the `EnsembleQValueNetwork` class.
 
-
-def make_critic(
-    state_dim: int,
-    hidden_dims: Optional[List[int]],
-    ensemble_critic_size: int,  # used only for ensemble critic
-    network_type: Union[Type[ValueNetwork], Type[QValueNetwork]],
-    action_dim: Optional[int] = None,
-) -> nn.Module:
-    """
-    A utility function to instantiate a critic network. 
-
-    Args:
-        state_dim (int): Dimension of the observation space.
-        hidden_dims (Optional[Iterable[int]]): Hidden dimensions of the critic network.
-        ensemble_critic_size: Number of critics.
-            Used only when network_type is EnsembleQValueNetwork.
-        network_type (Union[Type[ValueNetwork], Type[QValueNetwork]]): The type of the critic
-            network to instantiate.
-        action_dim (Optional[int]): The dimension of the action space.
-
-    Returns:
-        critic network (nn.Module): The critic network to be used by different modules.
-    """
-    if network_type == EnsembleQValueNetwork:
-        assert action_dim is not None
-        assert hidden_dims is not None
-        # cast network_type to get around static Pyre type checking; the runtime check with
-        # `issubclass` ensures the network type is a sublcass of QValueNetwork
-        network_type = cast(Type[QValueNetwork], network_type)
-
-        return EnsembleQValueNetwork(
-            state_dim=state_dim,
-            action_dim=action_dim,
-            hidden_dims=hidden_dims,
-            output_dim=1,
-            ensemble_size=ensemble_critic_size,
-            prior_scale=1.0,
-            init_fn=xavier_init_weights,
-        )
-    else:
-        if network_type == VanillaQValueNetwork:
-            # pyre-ignore[45]:
-            # Pyre does not know that `network_type` is asserted to be concrete
-            return network_type(
-                state_dim=state_dim,
-                action_dim=action_dim,
-                hidden_dims=hidden_dims,
-                output_dim=1,
-            )
-        elif network_type == VanillaValueNetwork:
-            # pyre-ignore[45]:
-            # Pyre does not know that `network_type` is asserted to be concrete
-            return network_type(
-                input_dim=state_dim, hidden_dims=hidden_dims, output_dim=1
-            )
-        else:
-            raise NotImplementedError(
-                f"Type {network_type} cannot be used to instantiate a critic network."
-            )
 
 def ensemble_critic_action_value_loss(
     state_batch: torch.Tensor,

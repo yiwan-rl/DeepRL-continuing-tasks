@@ -16,19 +16,14 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.api.action import Action
 
 from pearl.api.action_space import ActionSpace
-from pearl.api.observation import Observation
-from pearl.neural_networks.common.utils import (
-    update_target_network,
-)
+from pearl.api.state import SubjectiveState
+from pearl.neural_networks.common.utils import update_target_network
 from pearl.neural_networks.common.value_networks import ValueNetwork
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
+from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
 )
@@ -38,6 +33,7 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
 )
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 from torch import nn, optim
 
@@ -74,7 +70,7 @@ class ActorCriticBase(PolicyLearner):
         batch_size: int = 256,
         is_action_continuous: bool = False,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(ActorCriticBase, self).__init__(
             is_action_continuous=is_action_continuous,
@@ -109,14 +105,14 @@ class ActorCriticBase(PolicyLearner):
             self._critic_target: nn.Module = copy.deepcopy(self._critic)
 
         self._discount_factor = discount_factor
-        self._actor_learning_rate = self._actor_optimizer.param_groups[0]["lr"]
-        self._critic_learning_rate = self._critic_optimizer.param_groups[0]["lr"]
+        self._actor_learning_rate: float = self._actor_optimizer.param_groups[0]["lr"]
+        self._critic_learning_rate: float = self._critic_optimizer.param_groups[0]["lr"]
         self._current_steps = 0
         self._test_time = False
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
@@ -133,6 +129,7 @@ class ActorCriticBase(PolicyLearner):
         an action that strikes a balance between exploration and exploitation.
 
         Args:
+            subjective_state (SubjectiveState): Subjective state of the agent.
             available_action_space (ActionSpace): Set of eligible actions.
             exploit (bool, optional): Determines the mode of operation. If True, the function
             operates in exploit mode. If False, it operates in explore mode. Defaults to False.
@@ -147,12 +144,12 @@ class ActorCriticBase(PolicyLearner):
             self._current_steps += 1
         with torch.no_grad():
             if self._is_action_continuous:
-                exploit_action = self._actor.sample_action(observation)
+                exploit_action = self._actor.sample_action(subjective_state)
                 action_probabilities = None
             else:
                 assert isinstance(available_action_space, DiscreteActionSpace)
                 action_probabilities = self._actor.get_policy_distribution(
-                    state_batch=observation,
+                    state_batch=subjective_state,
                 )
                 # (action_space_size)
                 exploit_action_index = torch.argmax(action_probabilities)
@@ -167,7 +164,7 @@ class ActorCriticBase(PolicyLearner):
         return self._exploration_module.act(
             exploit_action=exploit_action,
             action_space=available_action_space,
-            observation=observation,
+            subjective_state=subjective_state,
             values=action_probabilities,
         )
 
@@ -199,7 +196,8 @@ class ActorCriticBase(PolicyLearner):
         if isinstance(self.reward_centering, TD_RC):
             if self.reward_centering.initialize_reward_rate == True:
                 self.reward_rate.data.fill_(batch.reward.mean())
-                self.reward_centering.initialize_reward_rate = False
+                # pyre-fixme
+                self.reward_centering.initialize_reward_rate: bool = False
         actor_loss = self._actor_loss(batch)
         self._actor_optimizer.zero_grad()
         """

@@ -7,5 +7,5 @@
 
 # pyre-strict
 
-Value = object
+Value = float
 Reward = Value

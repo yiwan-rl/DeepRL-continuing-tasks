@@ -11,7 +11,7 @@
     "reward_centering": [
         {
             "reward_centering:type":[null],
-            "discount_factor": [0.99, 0.999]
+            "discount_factor": [0.99]
         }
     ],
     "algos": [
@@ -148,7 +148,19 @@
         },
         {
             "eval_in_continuing_env": [false],
-            "env": [[{"env_name": "SwimmerNew-no-timeout-v4", "is_continuing": true}]]
+            "env": [[{"env_name": "Ant-no-timeout-v4", "is_continuing": true, "terminate_when_unhealthy": false}]]
+        },
+        {
+            "eval_in_continuing_env": [false],
+            "env": [[{"env_name": "Hopper-no-timeout-v4", "is_continuing": true, "terminate_when_unhealthy": false}]]
+        },
+        {
+            "eval_in_continuing_env": [false],
+            "env": [[{"env_name": "Humanoid-no-timeout-v4", "is_continuing": true, "terminate_when_unhealthy": false}]]
+        },
+        {
+            "eval_in_continuing_env": [false],
+            "env": [[{"env_name": "Walker2d-no-timeout-v4", "is_continuing": true, "terminate_when_unhealthy": false}]]
         }
     ]
 }

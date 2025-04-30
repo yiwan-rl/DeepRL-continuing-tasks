@@ -6,5 +6,6 @@
 #
 
 # pyre-strict
+import numpy as np
 
-Observation = object
+Observation = np.ndarray

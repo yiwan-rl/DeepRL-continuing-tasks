@@ -92,7 +92,6 @@ from pearl.replay_buffers import (
 from pearl.user_envs.wrappers import (
     AgentResetWrapper,
     EpisodicLifeEnv,
-    EpisodicWrapper,
     FireResetEnv,
     HalfCheetahWrapper,
     MaxAndSkipEnv,
@@ -137,15 +136,6 @@ def get_env(env_config_list: List[Dict[str, Any]]) -> GymEnvironment:
     if env_config.get("reset_wrapper", False):
         return GymEnvironment(
             ResetWrapper(
-                env=get_gym_env(env_config),
-                random_reset_prob=env_config.get("random_reset_prob", None),
-                reset_cost=env_config.get("reset_cost", None),
-            )
-        )
-
-    if env_config.get("episodic_wrapper", False):
-        return GymEnvironment(
-            EpisodicWrapper(
                 env=get_gym_env(env_config),
                 random_reset_prob=env_config.get("random_reset_prob", None),
                 reset_cost=env_config.get("reset_cost", None),

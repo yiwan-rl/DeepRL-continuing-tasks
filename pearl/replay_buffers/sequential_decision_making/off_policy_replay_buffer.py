@@ -6,11 +6,10 @@
 #
 
 # pyre-strict
+import numpy as np
 
-
-from pearl.api.action import Action
-from pearl.api.reward import Reward
 from pearl.api.observation import Observation
+from pearl.api.reward import Reward
 from pearl.replay_buffers.tensor_based_replay_buffer import TensorBasedReplayBuffer
 
 
@@ -20,22 +19,20 @@ class OffPolicyReplayBuffer(TensorBasedReplayBuffer):
             capacity=capacity,
         )
 
-    # TODO: add helper to convert subjective state into tensors
-    # TODO: assumes action space is gym action space with one-hot encoding
     def push(
         self,
-        state: Observation,
-        action: Action,
+        obs: Observation,
+        action: np.ndarray,
         reward: Reward,
-        next_state: Observation,
+        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:
         self.add(
-            state=state,
+            obs=obs,
             action=action,
             reward=reward,
-            next_state=next_state,
+            next_obs=next_obs,
             terminated=terminated,
             truncated=truncated,
         )

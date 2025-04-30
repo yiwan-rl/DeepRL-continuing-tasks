@@ -14,6 +14,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from pearl.neural_networks.common.residual_wrapper import ResidualWrapper
+
 # Activations and loss functions
 # TODO: Make these into Enums
 ACTIVATION_MAP = {
@@ -33,6 +35,15 @@ LOSS_TYPES = {
 }
 
 
+class OffsetLayer(nn.Module):
+    def __init__(self, offset=0.0):
+        super(OffsetLayer, self).__init__()
+        self.offset = offset
+
+    def forward(self, x):
+        return x + self.offset
+
+
 def mlp_block(
     input_dim: int,
     hidden_dims: Optional[List[int]],
@@ -40,6 +51,7 @@ def mlp_block(
     use_batch_norm: bool = False,
     use_layer_norm: bool = False,
     hidden_activation: str = "relu",
+    last_offset: float = 0.0,
     last_activation: Optional[str] = None,
     dropout_ratio: float = 0.0,
     use_skip_connections: bool = False,
@@ -92,6 +104,8 @@ def mlp_block(
 
     last_layer = []
     last_layer.append(nn.Linear(dims[-2], dims[-1]))
+    if last_offset != 0.0:
+        last_layer.append(OffsetLayer(last_offset))
     if last_activation is not None:
         last_layer.append(ACTIVATION_MAP[last_activation]())
     last_layer_model = nn.Sequential(*last_layer)

@@ -15,10 +15,9 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-from pearl.api.observation import Observation
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
+from pearl.api.state import SubjectiveState
 from pearl.neural_networks.common.utils import update_target_network
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
@@ -29,6 +28,7 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
 )
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 from torch import optim
@@ -54,7 +54,7 @@ class DeepTDLearning(PolicyLearner):
         target_update_freq: int = 10,
         soft_update_tau: float = 0.1,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
         **kwargs: Any,
     ) -> None:
         """Constructs a DeepTDLearning based policy learner. DeepTDLearning is the base class
@@ -124,7 +124,7 @@ class DeepTDLearning(PolicyLearner):
 
     def act(
         self,
-        observation: Observation,
+        subjective_state: SubjectiveState,
         available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
@@ -135,7 +135,7 @@ class DeepTDLearning(PolicyLearner):
         Q values or (ii) an 'exploratory action' obtained using the specified `exploration_module`.
 
         Args:
-            observation (Observation): Current observation.
+            subjective_state (SubjectiveState): Current subjective state.
             available_action_space (ActionSpace): Available action space at the current state.
                 Note that Pearl allows for action spaces to change dynamically.
             exploit (bool): When set to True, we output the exploit action (no exploration).
@@ -149,16 +149,16 @@ class DeepTDLearning(PolicyLearner):
         # Fix the available action space.
         assert isinstance(available_action_space, DiscreteActionSpace)
         with torch.no_grad():
-            batched_observation = observation.unsqueeze(0)  # (1 x state_dim)
+            batched_subjective_state = subjective_state.unsqueeze(0)  # (1 x state_dim)
             batched_actions_representation = self._action_representation_module(
-                available_action_space.actions_batch.to(batched_observation)
+                available_action_space.actions_batch.to(batched_subjective_state)
             ).unsqueeze(
                 0
             )  # (1 x number of actions x action_dim)
 
             q_values = self._Q.get_q_values(
-                state_batch=batched_observation, 
-                action_batch=batched_actions_representation
+                state_batch=batched_subjective_state,
+                action_batch=batched_actions_representation,
             )  # (1 x number of actions)
             # this does a forward pass since all avaialble
             # actions are already stacked together
@@ -171,7 +171,7 @@ class DeepTDLearning(PolicyLearner):
 
         assert self._exploration_module is not None
         return self._exploration_module.act(
-            observation=observation,
+            subjective_state=subjective_state,
             action_space=available_action_space,
             exploit_action=exploit_action,
             values=q_values,
@@ -201,8 +201,12 @@ class DeepTDLearning(PolicyLearner):
         Returns:
             Dict[str, Any]: dictionary with loss as the mean bellman error (across the batch).
         """
-        if isinstance(self.reward_centering, TD_RC) and self.reward_centering.initialize_reward_rate == True:
+        if (
+            isinstance(self.reward_centering, TD_RC)
+            and self.reward_centering.initialize_reward_rate == True
+        ):
             self.reward_rate.data.fill_(batch.reward.mean())
+            # pyre-fixme
             self.reward_centering.initialize_reward_rate = False
         state_batch = batch.state  # (batch_size x state_dim)
         action_batch = batch.action  # (batch_size x action_dim)
@@ -229,7 +233,8 @@ class DeepTDLearning(PolicyLearner):
 
         criterion = torch.nn.MSELoss()
         bellman_loss = criterion(
-            state_action_values + self.reward_rate, expected_state_action_values.detach()
+            state_action_values + self.reward_rate,
+            expected_state_action_values.detach(),
         )
         loss = bellman_loss
 
@@ -267,8 +272,5 @@ class DeepTDLearning(PolicyLearner):
         Returns:
             f_value (Tensor): The value function for the batch of transitions.
         """
-        qs = self._Q.get_q_values(
-            state_batch=batch.state, 
-            action_batch=batch.action
-        )
+        qs = self._Q.get_q_values(state_batch=batch.state, action_batch=batch.action)
         return torch.mean(qs).detach()

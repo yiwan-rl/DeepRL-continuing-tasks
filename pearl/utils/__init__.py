@@ -6,10 +6,7 @@
 
 # pyre-strict
 
-from .device import (
-    get_default_device,
-    get_pearl_device,
-)
+from .device import get_default_device, get_pearl_device
 from .tensor_like import assert_is_tensor_like
 
 __all__ = [

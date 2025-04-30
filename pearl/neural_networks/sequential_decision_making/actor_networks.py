@@ -374,6 +374,182 @@ class VanillaContinuousActorNetwork(ActorNetwork):
         return action
 
 
+class VanillaContinuousSeparateAgentResetActorNetwork(ActorNetwork):
+    """
+    This is vanilla version of deterministic actor network
+    Given input state, output an action vector
+    Args
+        output_dim: action dimension
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        output_dim: int,
+        action_space: ActionSpace,
+    ) -> None:
+        super(VanillaContinuousSeparateAgentResetActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        self._model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            output_dim=output_dim - 1,
+            last_activation="tanh",
+        )
+        self._reset_model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            output_dim=1,
+            # last_offset=-2,
+            last_activation="tanh",
+        )
+        # last_layer = [nn.Linear(input_dim, 1, bias=False), nn.Tanh()]
+        # last_layer = [nn.Linear(input_dim, 1), nn.Tanh()]
+        # self._reset_model: nn.Module = nn.Sequential(*last_layer)
+        self._action_space = action_space
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        action = self._model(x)
+        # y = x.clone()
+        # if len(x.shape) == 2:
+        #     y[:, 1:] = 0.0
+        #     y[:, 0] -= 1.0
+        #     y *= -40.0
+        # else:
+        #     y[1:] = 0.0
+        #     y[0] -= 1.0
+        #     y *= -40.0
+        # reset = self._reset_model(y)
+
+        # print(reset)
+        reset = self._reset_model(x)
+        # reset = torch.clip(reset, -1 + 1e-6, 1 - 1e-6)
+        # print(x.shape, action)
+
+        # reset = (
+        #     ((x[:, 0] < 1.0).unsqueeze(-1).float() - 0.5) * 2.0
+        #     if len(x.shape) == 2
+        #     else ((x[0] < 1.0).unsqueeze(-1).float() - 0.5) * 2.0
+        # )
+
+        # reset = (
+        #     (((x[:, 0] < 1.0) | (x[:, 0] > 2.0)).unsqueeze(-1).float() - 0.5) * 2.0
+        #     if len(x.shape) == 2
+        #     else (((x[0] < 1.0) | (x[0] > 2.0)).unsqueeze(-1).float() - 0.5) * 2.0
+        # )
+
+        # reset = (
+        #     (x[:, 0] < -10.0).unsqueeze(-1).float()
+        #     if len(x.shape) == 2
+        #     else (x[0] < -10.0).unsqueeze(-1).float()
+        # )
+
+        action = torch.cat((action, reset), dim=-1)
+        return action
+
+    def sample_action(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Sample an action from the actor network.
+        Args:
+            x: input state
+        Returns:
+            action: sampled action, scaled to the action space bounds
+        """
+        normalized_action = self.forward(x)
+        action = action_scaling(self._action_space, normalized_action)
+        return action
+
+
+class VanillaContinuousCombinedAgentResetActorNetwork(ActorNetwork):
+    """
+    This is vanilla version of deterministic actor network
+    Given input state, output an action vector
+    Args
+        output_dim: action dimension
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: Optional[List[int]],
+        output_dim: int,
+        action_space: ActionSpace,
+    ) -> None:
+        super(VanillaContinuousCombinedAgentResetActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        self._model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            output_dim=output_dim,
+            last_activation="tanh",
+        )
+        # self._reset_model: nn.Module = mlp_block(
+        #     input_dim=input_dim,
+        #     hidden_dims=hidden_dims,
+        #     output_dim=1,
+        #     # last_offset=-2,
+        #     last_activation="tanh",
+        # )
+        # last_layer = [nn.Linear(input_dim, 1, bias=False), nn.Tanh()]
+        # last_layer = [nn.Linear(input_dim, 1), nn.Tanh()]
+        # self._reset_model: nn.Module = nn.Sequential(*last_layer)
+        self._action_space = action_space
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        action = self._model(x)
+        # y = x.clone()
+        # if len(x.shape) == 2:
+        #     y[:, 1:] = 0.0
+        #     y[:, 0] -= 1.0
+        #     y *= -40.0
+        # else:
+        #     y[1:] = 0.0
+        #     y[0] -= 1.0
+        #     y *= -40.0
+        # reset = self._reset_model(y)
+
+        # print(reset)
+        # reset = self._reset_model(x)
+        # reset = torch.clip(reset, -1 + 1e-6, 1 - 1e-6)
+        # print(x.shape, action)
+
+        # reset = (
+        #     ((x[:, 0] < 1.0).unsqueeze(-1).float() - 0.5) * 2.0
+        #     if len(x.shape) == 2
+        #     else ((x[0] < 1.0).unsqueeze(-1).float() - 0.5) * 2.0
+        # )
+
+        # reset = (
+        #     (((x[:, 0] < 1.0) | (x[:, 0] > 2.0)).unsqueeze(-1).float() - 0.5) * 2.0
+        #     if len(x.shape) == 2
+        #     else (((x[0] < 1.0) | (x[0] > 2.0)).unsqueeze(-1).float() - 0.5) * 2.0
+        # )
+
+        # reset = (
+        #     (x[:, 0] < -10.0).unsqueeze(-1).float()
+        #     if len(x.shape) == 2
+        #     else (x[0] < -10.0).unsqueeze(-1).float()
+        # )
+
+        # action = torch.cat((action, reset), dim=-1)
+        return action
+
+    def sample_action(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Sample an action from the actor network.
+        Args:
+            x: input state
+        Returns:
+            action: sampled action, scaled to the action space bounds
+        """
+        normalized_action = self.forward(x)
+        action = action_scaling(self._action_space, normalized_action)
+        return action
+
+
 class GaussianActorNetwork(ActorNetwork):
     """
     A multivariate gaussian actor network: parameterize the policy (action distirbution)
@@ -544,6 +720,210 @@ class GaussianActorNetwork(ActorNetwork):
         return log_prob
 
 
+class GaussianAgentResetActorNetwork(ActorNetwork):
+    """
+    A multivariate gaussian actor network: parameterize the policy (action distirbution)
+    as a multivariate gaussian. Given input state, the network outputs a pair of
+    (mu, sigma), where mu is the mean of the Gaussian distribution, and sigma is its
+    standard deviation along different dimensions.
+       - Note: action distribution is assumed to be independent across different
+         dimensions
+       - Note: we implement both state-independent and state-dependent standard deviations
+    Args:
+        input_dim: input state dimension
+        hidden_dims: list of hidden layer dimensions; cannot pass an empty list
+        output_dim: action dimension
+        action_space: action space
+        state_conditioned_std: if True,
+            the standard deviation shares the same network body with the mean,
+            otherwise it is a set of k trainable parameters, where k is the number of actions
+        hidden_activation: activation function for hidden layers
+        log_std_init_offset: initial value of log of standard deviation,
+            used only for state-independent std
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: List[int],
+        output_dim: int,
+        action_space: ActionSpace,
+        state_conditioned_std: bool = True,
+        hidden_activation: str = "relu",
+        log_std_init_offset: float = 0.0,
+    ) -> None:
+        super(GaussianAgentResetActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        if len(hidden_dims) < 1:
+            raise ValueError(
+                "The hidden dims cannot be empty for a gaussian actor network."
+            )
+        self.state_conditioned_std = state_conditioned_std
+
+        self._model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims[:-1],
+            output_dim=hidden_dims[-1],
+            hidden_activation=hidden_activation,
+            last_activation=hidden_activation,
+        )
+        self.fc_mu = torch.nn.Linear(hidden_dims[-1], output_dim - 1)
+        if self.state_conditioned_std:
+            self.fc_std: nn.Module = torch.nn.Linear(hidden_dims[-1], output_dim - 1)
+        else:
+            self.log_std: torch.Tensor = nn.Parameter(
+                torch.zeros(output_dim - 1) + log_std_init_offset
+            )
+
+        self._reset_model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims[:-1],
+            output_dim=hidden_dims[-1],
+            hidden_activation=hidden_activation,
+            last_activation=hidden_activation,
+        )
+        self.reset_fc_mu = torch.nn.Linear(hidden_dims[-1], 1)
+        if self.state_conditioned_std:
+            self.reset_fc_std: nn.Module = torch.nn.Linear(hidden_dims[-1], 1)
+        else:
+            self.reset_log_std: torch.Tensor = nn.Parameter(
+                torch.zeros(1) + log_std_init_offset
+            )
+
+        self._action_space = action_space
+        # check this for multi-dimensional spaces
+        assert isinstance(action_space, BoxActionSpace)
+        self.register_buffer(
+            "_action_bound",
+            (action_space.high.clone().detach() - action_space.low.clone().detach())
+            / 2,
+        )
+
+        # preventing the actor network from learning a flat or a point mass distribution
+        self._log_std_min = -5
+        self._log_std_max = 2
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self._model(x)
+        mean = self.fc_mu(x)
+        if self.state_conditioned_std:
+            log_std = self.fc_std(x)
+            # log_std = torch.clamp(log_std, min=self._log_std_min, max=self._log_std_max)
+
+            # alternate to standard clamping; not sure if it makes a difference but still
+            # trying out
+            log_std = torch.tanh(log_std)
+            log_std = self._log_std_min + 0.5 * (
+                self._log_std_max - self._log_std_min
+            ) * (log_std + 1)
+        else:
+            log_std = self.log_std.expand_as(mean)
+
+        reset_x = self._reset_model(x)
+        reset_mean = self.reset_fc_mu(reset_x)
+        if self.state_conditioned_std:
+            reset_log_std = self.reset_fc_std(reset_x)
+            # log_std = torch.clamp(log_std, min=self._log_std_min, max=self._log_std_max)
+
+            # alternate to standard clamping; not sure if it makes a difference but still
+            # trying out
+            reset_log_std = torch.tanh(reset_log_std)
+            reset_log_std = self._log_std_min + 0.5 * (
+                self._log_std_max - self._log_std_min
+            ) * (reset_log_std + 1)
+        else:
+            reset_log_std = self.reset_log_std.expand_as(reset_mean)
+
+        mean = torch.cat((mean, reset_mean), dim=-1)
+        log_std = torch.cat((log_std, reset_log_std), dim=-1)
+
+        return mean, log_std
+
+    def sample_action(
+        self, state_batch: Tensor, get_log_prob: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Sample an action from the actor network.
+
+        Args:
+            state_batch: A tensor of states.  # TODO: Enforce batch shape?
+            get_log_prob: If True, also return the log probability of the sampled actions.
+
+        Returns:
+            action: Sampled action, scaled to the action space bounds.
+            log_prob [Optional]: log probability of the sampled action.
+        """
+        mean, log_std = self.forward(state_batch)
+        std = log_std.exp()
+        normal = Normal(mean, std)
+        sample = normal.rsample()  # reparameterization trick
+
+        # ensure sampled action is within [-1, 1]^{action_dim}
+        normalized_action = torch.tanh(sample)
+
+        # clamp each action dimension to prevent numerical issues in tanh
+        # normalized_action.clamp(-1 + epsilon, 1 - epsilon)
+        action = action_scaling(self._action_space, normalized_action)
+        if get_log_prob:
+            log_prob = self._get_log_prob_normal(normal, sample, normalized_action)
+            return action, log_prob
+        else:
+            return action
+
+    def get_action_log_prob_and_entropy(
+        self, state_batch: torch.Tensor, action_batch: torch.Tensor
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Compute log probability of actions, pi(a|s) under the policy parameterized by
+        the actor network.
+        Args:
+            state_batch: batch of states
+            action_batch: batch of actions
+        Returns:
+            log_prob: log probability of each action in the batch
+        """
+        epsilon = 1e-6
+        mean, log_std = self.forward(state_batch)
+        std = log_std.exp()
+        normal = Normal(mean, std)
+
+        normalized_action_batch = torch.clip(
+            # rescales from [low, high]^{action_dim} to [-1, 1]^{action_dim}.
+            action_unscaling(self._action_space, action_batch),
+            -1 + epsilon,
+            1 - epsilon,
+        )
+
+        # transform actions from [-1, 1]^d to [-inf, inf]^d
+        unnormalized_action_batch = torch.atanh(normalized_action_batch)
+        log_prob = self._get_log_prob_normal(
+            normal, unnormalized_action_batch, normalized_action_batch
+        )
+
+        return log_prob, normal.entropy().view(
+            -1, 1
+        )  # shape (batch_size, 1), (batch_size, 1)
+
+    def _get_log_prob_normal(
+        self,
+        normal_dist: torch.distributions.Distribution,
+        unnormalized_action_batch: Tensor,
+        normalized_action_batch: Tensor,
+    ) -> Tensor:
+        log_prob = normal_dist.log_prob(unnormalized_action_batch)
+        log_prob -= torch.log(
+            self._action_bound * (1 - normalized_action_batch.pow(2)) + 1e-6
+        )
+
+        # for multi-dimensional action space, sum log probabilities over individual
+        # action dimension
+        if log_prob.dim() == 2:
+            log_prob = log_prob.sum(dim=1, keepdim=True)
+
+        return log_prob
+
+
 class ClipGaussianActorNetwork(ActorNetwork):
     """
     A multivariate gaussian actor network: parameterize the policy (action distirbution)
@@ -599,6 +979,134 @@ class ClipGaussianActorNetwork(ActorNetwork):
         x = self._model(x)
         mean = self.fc_mu(x)
         log_std = self.log_std.expand_as(mean)
+        return mean, log_std
+
+    def sample_action(
+        self, state_batch: Tensor, get_log_prob: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Sample an action from the actor network.
+
+        Args:
+            state_batch: A tensor of states.  # TODO: Enforce batch shape?
+            get_log_prob: If True, also return the log probability of the sampled actions.
+
+        Returns:
+            action: Sampled action, scaled to the action space bounds.
+            log_prob [Optional]: log probability of the sampled action.
+        """
+        mean, log_std = self.forward(state_batch)
+        std = log_std.exp()
+        normal = Normal(mean, std)
+        action = normal.sample()  # reparameterization trick
+
+        if get_log_prob:
+            log_prob = normal.log_prob(action)
+            return action, log_prob
+        else:
+            return action
+
+    def get_action_log_prob_and_entropy(
+        self, state_batch: torch.Tensor, action_batch: torch.Tensor
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Compute log probability of actions, pi(a|s) under the policy parameterized by
+        the actor network.
+        Args:
+            state_batch: batch of states
+            action_batch: batch of actions
+        Returns:
+            log_prob: log probability of each action in the batch
+        """
+        mean, log_std = self.forward(state_batch)
+        std = log_std.exp()
+        normal = Normal(mean, std)
+        log_prob = normal.log_prob(action_batch)
+        entropy = normal.entropy()
+        assert log_prob.dim() == 2
+        assert entropy.dim() == 2
+        if log_prob.dim() == 2:
+            log_prob = log_prob.sum(dim=1, keepdim=True)
+        if entropy.dim() == 2:
+            entropy = entropy.sum(dim=1, keepdim=True)
+        return log_prob, entropy  # shape (batch_size, 1), (batch_size, 1)
+
+
+class ClipGaussianAgentResetActorNetwork(ActorNetwork):
+    """
+    A multivariate gaussian actor network: parameterize the policy (action distirbution)
+    as a multivariate gaussian. Given input state, the network outputs a pair of
+    (mu, sigma), where mu is the mean of the Gaussian distribution, and sigma is its
+    standard deviation along different dimensions.
+       - Note: action distribution is assumed to be independent across different
+         dimensions
+       - Note: we implement both state-independent and state-dependent standard deviations
+    Args:
+        input_dim: input state dimension
+        hidden_dims: list of hidden layer dimensions; cannot pass an empty list
+        output_dim: action dimension
+        action_space: action space
+        state_conditioned_std: if True,
+            the standard deviation shares the same network body with the mean,
+            otherwise it is a set of k trainable parameters, where k is the number of actions
+        hidden_activation: activation function for hidden layers
+        log_std_init_offset: initial value of log of standard deviation,
+            used only for state-independent std
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: List[int],
+        output_dim: int,
+        action_space: ActionSpace,
+        hidden_activation: str = "tanh",
+        log_std_init_offset: float = 0.0,
+    ) -> None:
+        super(ClipGaussianActorNetwork, self).__init__(
+            input_dim, hidden_dims, output_dim, action_space
+        )
+        if len(hidden_dims) < 1:
+            raise ValueError(
+                "The hidden dims cannot be empty for a gaussian actor network."
+            )
+
+        self._model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims[:-1],
+            output_dim=hidden_dims[-1],
+            hidden_activation=hidden_activation,
+            last_activation=hidden_activation,
+        )
+        self.fc_mu = torch.nn.Linear(hidden_dims[-1], output_dim - 1)
+        self.log_std: torch.Tensor = nn.Parameter(
+            torch.zeros(output_dim - 1) + log_std_init_offset
+        )
+
+        self._reset_model: nn.Module = mlp_block(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims[:-1],
+            output_dim=hidden_dims[-1],
+            hidden_activation=hidden_activation,
+            last_activation=hidden_activation,
+        )
+        self.reset_fc_mu = torch.nn.Linear(hidden_dims[-1], 1)
+        self.reset_log_std: torch.Tensor = nn.Parameter(
+            torch.zeros(1) + log_std_init_offset
+        )
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self._model(x)
+        mean = self.fc_mu(x)
+        log_std = self.log_std.expand_as(mean)
+
+        reset_x = self._reset_model(x)
+        reset_mean = self.reset_fc_mu(reset_x)
+        reset_log_std = self.reset_log_std.expand_as(reset_mean)
+
+        mean = torch.cat((mean, reset_mean), dim=-1)
+        log_std = torch.cat((log_std, reset_log_std), dim=-1)
+
         return mean, log_std
 
     def sample_action(

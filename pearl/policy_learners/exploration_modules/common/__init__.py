@@ -11,6 +11,7 @@ from .no_exploration import NoExploration
 from .normal_distribution_exploration import NormalDistributionExploration
 from .propensity_exploration import PropensityExploration
 from .score_exploration_base import ScoreExplorationBase
+from .uniform_exploration_base import UniformExplorationBase
 
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "NormalDistributionExploration",
     "PropensityExploration",
     "ScoreExplorationBase",
+    "UniformExplorationBase",
 ]

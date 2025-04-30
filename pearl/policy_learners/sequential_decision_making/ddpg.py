@@ -10,20 +10,17 @@
 from typing import Optional, Union
 
 import torch
-from torch import optim
+import torch.nn.utils as utils
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     ActorNetwork,
+    VanillaContinuousSeparateAgentResetActorNetwork,
 )
-from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
-)
-from pearl.policy_learners.exploration_modules.common.normal_distribution_exploration import (  # noqa E501
-    NormalDistributionExploration,
 )
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -35,6 +32,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.critic_utils import (
     ensemble_critic_action_value_loss,
 )
+from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
 
 
@@ -59,7 +57,9 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
         training_rounds: int = 1,
         batch_size: int = 256,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
+        l2_norm_coeff: float = 0.0,
+        entropy_coeff: float = 0.0,
     ) -> None:
         super(DeepDeterministicPolicyGradient, self).__init__(
             use_actor_target=True,
@@ -80,12 +80,15 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
             reward_rate=reward_rate,
             reward_centering=reward_centering,
         )
+        self.l2_norm_coeff = l2_norm_coeff
+        self.entropy_coeff = entropy_coeff
 
     def _actor_loss(self, batch: TransitionBatch) -> torch.Tensor:
 
         # sample a batch of actions from the actor network; shape (batch_size, action_dim)
         action_batch = self._actor.sample_action(batch.state)
-
+        # if self._current_steps % 10000 == 0:
+        #     print("action_batch", action_batch[:, -1])
         # obtain q values for (batch.state, action_batch) from the first critic
         q = self._critic.get_q_values(
             state_batch=batch.state,
@@ -94,7 +97,56 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
         )
 
         # optimization objective: optimize actor to maximize Q(s, a)
-        loss = -q.mean()
+
+        def compute_l2_norm(model):
+            # # Convert model parameters to a single vector
+            # param_vector = utils.parameters_to_vector(model.parameters())
+            # # Compute the L2 norm (Euclidean norm) of the flattened vector
+            # return torch.norm(param_vector)
+            l2_reg = 0
+            for param in model.parameters():
+                # print("1", param, torch.sum(param**2))
+                l2_reg += torch.sum(param**2)
+            return l2_reg
+
+        # print(action_batch[:, -1])
+        # exit(1)
+        probs = torch.clip((action_batch[:, -1] + 0.4) / 0.8, 0.0, 1.0)
+        # print(probs)
+        loss = (
+            -q.mean()
+            + self.entropy_coeff
+            * (
+                1 * probs * torch.log(probs + 1e-6)
+                + 1 * (1 - probs) * torch.log(1 - probs + 1e-6)
+            ).mean()
+            # + 0.001 * (self._actor._reset_model[0][0].weight[0] ** 2).sum()
+            # + 0.001 * (self._actor._reset_model[0][0].bias ** 2).sum()
+        )
+        if isinstance(self._actor, VanillaContinuousSeparateAgentResetActorNetwork):
+            loss += self.l2_norm_coeff * compute_l2_norm(self._actor._reset_model)
+        else:
+            loss += self.l2_norm_coeff * compute_l2_norm(self._actor._model)
+        # print(
+        #     2,
+        #     self._actor._reset_model[0][0].weight,
+        #     self._actor._reset_model[0][0].bias,
+        #     torch.sum(self._actor._reset_model[0][0].weight[0] ** 2),
+        #     torch.sum(self._actor._reset_model[0][0].bias ** 2),
+        #     (self._actor._reset_model[0][0].weight[0] ** 2).sum(),
+        #     (self._actor._reset_model[0][0].bias ** 2).sum(),
+        #     (
+        #         self._actor._reset_model[0][0].weight[0] ** 2
+        #         + self._actor._reset_model[0][0].bias ** 2
+        #     ).sum(),
+        # )
+        # print(self._actor._reset_model[0][0].weight[0], self._actor._reset_model[0][0].bias)
+        # print(
+        #     3,
+        #     compute_l2_norm(self._actor._reset_model),
+        #     (self._actor._reset_model[0][0].weight[0] ** 2).sum()
+        #     + (self._actor._reset_model[0][0].bias ** 2).sum(),
+        # )
 
         return loss
 

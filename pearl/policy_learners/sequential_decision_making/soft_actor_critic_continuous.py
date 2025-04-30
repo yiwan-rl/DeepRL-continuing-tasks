@@ -13,9 +13,7 @@ import torch
 from pearl.action_representation_modules.action_representation_module import (
     ActionRepresentationModule,
 )
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
+from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
 )
@@ -55,7 +53,7 @@ class ContinuousSoftActorCritic(ActorCriticBase):
         ensemble_critic_size: int = 2,
         target_entropy_offset: float = 0.0,
         reward_rate: torch.Tensor = torch.tensor(0.0),
-        reward_centering: Optional[TD_RC|RVI_RC|MA_RC] = None,
+        reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(ContinuousSoftActorCritic, self).__init__(
             use_actor_target=False,
@@ -90,7 +88,8 @@ class ContinuousSoftActorCritic(ActorCriticBase):
             self.register_buffer("_entropy_coef", torch.exp(self._log_entropy).detach())
             self.register_buffer(
                 "_target_entropy",
-                -torch.tensor(action_representation_module.representation_dim) + target_entropy_offset,
+                -torch.tensor(action_representation_module.representation_dim)
+                + target_entropy_offset,
             )
         else:
             self.register_buffer("_entropy_coef", torch.tensor(entropy_coef))
