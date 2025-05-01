@@ -14,6 +14,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from pearl.neural_networks.common.residual_wrapper import ResidualWrapper
+
 # Activations and loss functions
 # TODO: Make these into Enums
 ACTIVATION_MAP = {
