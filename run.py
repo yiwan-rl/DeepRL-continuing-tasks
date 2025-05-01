@@ -428,12 +428,11 @@ def offline_eval(
         eps_clipped_return = None
 
     if eval_in_continuing_env:
-        assert envs[2] is not None
         # evaluate the agent in the continuing version of the environment
         # pyre-fixme
         observation, action_space = envs[2].reset()
         agent.reset(observation, action_space)
-        eval_cum_reward, eval_cum_reset = 0, 0
+        eval_cum_reward, eval_cum_reset, eval_cum_clipped_reward = 0, 0, 0
 
         # deal with reward clipping
         use_reward_clipping = False
@@ -441,40 +440,49 @@ def offline_eval(
             if isinstance(preprocessor, RewardClipping):
                 use_reward_clipping = True
                 break
-        if use_reward_clipping:
-            eval_cum_clipped_reward = 0
-        else:
-            eval_cum_clipped_reward = None
+
         for _ in range(1, eval_max_steps + 1):
+            # the agent takes an action
             action = agent.act(exploit=False)
             action = (
                 action.cpu() if isinstance(action, torch.Tensor) else action
             )  # action can be int sometimes
+
+            # the environment receives the action and returns the result
+            # pyre-fixme
             action_result = envs[2].step(action)
+
+            # update stats
             eval_cum_reward += action_result.reward
+            eval_cum_reset += int(action_result.info.get("reset", False))
+
             for preprocessor in preprocessors:
                 preprocessor.process(action_result)
-            if use_reward_clipping:
-                eval_cum_clipped_reward += action_result.reward
+            eval_cum_clipped_reward += action_result.reward
+
+            # the agent receives the action result
             agent.observe(action_result)
         avg_reward = eval_cum_reward / eval_max_steps
-        if eval_cum_clipped_reward is not None:
-            avg_clipped_reward = eval_cum_clipped_reward / eval_max_steps
-        else:
-            avg_clipped_reward = None
+        avg_reset = eval_cum_reset / eval_max_steps
+        avg_clipped_reward = eval_cum_clipped_reward / eval_max_steps
     else:
         avg_reward = None
+        avg_reset = None
         avg_clipped_reward = None
-    logger.info(f"offline eval, epsodic return {eps_return}, avg reward {avg_reward}")
+    # recover from testing to training
+    logger.info(
+        f"offline eval, epsodic return {eps_return}, episodic clipped return {eps_clipped_return}, avg reward {avg_reward}, avg clipped reward {avg_clipped_reward}, avg reset {avg_reset}"
+    )
+    # recover from testing to training
     if hasattr(agent.policy_learner.exploration_module, "set_test_time_false"):
-        # Do not change counter in the exploration module during evaluation
+        # pyre-fixme
         agent.policy_learner.exploration_module.set_test_time_false()
     if hasattr(agent.policy_learner, "_test_time"):
         agent.policy_learner._test_time = False
     for p in preprocessors:
         if hasattr(p, "_test_time"):
             p._test_time = False
-    return eps_return, avg_reward, eps_clipped_return, avg_clipped_reward
+    return eps_return, avg_reward, eps_clipped_return, avg_clipped_reward, avg_reset
 
 
 def run_episode(
@@ -730,40 +738,52 @@ def run_steps(
     run_idx = param_sweeper_dict["id"]
     max_steps = param_sweeper_dict["max_steps"]
     eval_max_steps = param_sweeper_dict["eval_max_steps"]
+    record_visited_observations = param_sweeper_dict.get("record_visited_observations", False)
+    observation_record_period = param_sweeper_dict.get("observation_record_period", 1000)
     env = envs[0]  # train env
     agent = train_agent
+    assert env is not None
     observation, action_space = env.reset()
     agent.reset(observation, action_space)
 
     # reward stats initialization
     cum_reward = 0
     avg_reward_list = []
-    eval_average_reward_list = []  # used only when eval_env_continuing is not None
-    eval_episodic_return_list = []  # used only when eval_env_episodic is not None
-    eval_average_clipped_reward_list = []
-    eval_episodic_clipped_return_list = []
     last_cum_reward_print = cum_reward
     last_cum_reward_record = cum_reward
+    eval_average_reward_list = []  # used only when eval_env_continuing is not None
+    eval_episodic_return_list = []  # used only when eval_env_episodic is not None
+
+    # reset stats initialization
+    cum_reset = 0
+    avg_reset_list = []
+    last_cum_reset_print = 0
+    last_cum_reset_record = 0
+    eval_average_reset_list = []
+    
+    # reward clipping stats initialization
+    cum_clipped_reward = 0
+    avg_clipped_reward_list = []
+    last_cum_clipped_reward_print = 0
+    last_cum_clipped_reward_record = 0
+    eval_average_clipped_reward_list = []
+    eval_episodic_clipped_return_list = []
+
     learning_report = {}
     learning_report_cache = {}
     start_time = time.time()
     last_timed_steps = 0
     steps = 0
-    use_reward_clipping = False
-    if param_sweeper_dict.get("record_visited_observations", False) is True:
-        visited_observations = []
-    else:
-        visited_observations = None
 
+    visited_observations = []
+
+    # reward clipping initialization
+    use_reward_clipping = False
     for preprocessor in param_sweeper_dict["preprocessors"]:
         if isinstance(preprocessor, RewardClipping):
             use_reward_clipping = True
             break
-    if use_reward_clipping:
-        cum_clipped_reward = 0
-        last_cum_clipped_reward_print = cum_reward
-        last_cum_clipped_reward_record = cum_reward
-        avg_clipped_reward_list = []
+
     while steps < max_steps:
         # agent takes an action
         action = agent.act(exploit=False)
@@ -775,74 +795,100 @@ def run_steps(
         action_result = env.step(action)
 
         # update stats
-        if "reward_offset" in param_sweeper_dict:
-            action_result.reward += param_sweeper_dict["reward_offset"]
-        assert action_result.truncated is False
-
+        action_result.reward += param_sweeper_dict.get("reward_offset", 0)  # shift all rewards by a constant value
         cum_reward += action_result.reward
+        cum_reset += action_result.info.get("reset", 0)
         for preprocessor in param_sweeper_dict["preprocessors"]:
             preprocessor.process(action_result)
-        if use_reward_clipping:
-            cum_clipped_reward += action_result.reward
-        if visited_observations is not None and steps % 1000 == 0:
+        cum_clipped_reward += action_result.reward
+        if record_visited_observations is True and steps % observation_record_period == 0:
             visited_observations.append(action_result.observation)
 
-        agent.observe(action_result)
         steps += 1
 
         # print stats
         if steps % print_every_x_steps == 0:
+            actor_loss = (
+                np.mean(learning_report_cache["actor_loss"])
+                if "actor_loss" in learning_report_cache
+                else 0
+            )
+            critic_loss = (
+                np.mean(learning_report_cache["critic_loss"])
+                if "critic_loss" in learning_report_cache
+                else 0
+            )
+            message = f"steps {steps}, agent={agent}, env={env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
             if use_reward_clipping:
-                logger.info(
-                    f"steps {steps}, agent={agent}, env={env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}",
+                message = (
+                    message
+                    + f", average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}"
                 )
                 last_cum_clipped_reward_print = cum_clipped_reward
-            else:
-                logger.info(
-                    f"steps {steps}, agent={agent}, env={env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}",
-                )
             last_cum_reward_print = cum_reward
+            last_cum_reset_print = cum_reset
             end_time = time.time()
             SPS = int((steps - last_timed_steps) / (end_time - start_time))
             logger.info(f"samples per second: {SPS}")
+            logger.info(message)
             start_time = end_time
             last_timed_steps = steps
+
+        # record stats
         if steps % record_period == 0:
             # record the average reward over the last record_period time steps
             avg_reward_list.append(
                 (cum_reward - last_cum_reward_record) / record_period
             )
             last_cum_reward_record = cum_reward
-            if use_reward_clipping:
-                avg_clipped_reward_list.append(
-                    (cum_clipped_reward - last_cum_clipped_reward_record)
-                    / record_period
-                )
-                last_cum_clipped_reward_record = cum_clipped_reward
-            # evaluate the learned policy in the episodic and continuing versions of the environment
-            eps_return, avg_reward, eps_clipped_return, avg_clipped_reward = (
-                offline_eval(
-                    eval_agent=eval_agent,
-                    envs=envs,
-                    eval_max_steps=eval_max_steps,
-                    preprocessors=param_sweeper_dict["preprocessors"],
-                    eval_in_episodic_env=param_sweeper_dict["eval_in_episodic_env"],
-                    eval_in_continuing_env=param_sweeper_dict["eval_in_continuing_env"],
-                )
+
+            # record the average reset over the last record_period time steps
+            avg_reset_list.append((cum_reset - last_cum_reset_record) / record_period)
+            last_cum_reset_record = cum_reset
+
+            # record the average clipped reward over the last record_period time steps
+            avg_clipped_reward_list.append(
+                (cum_clipped_reward - last_cum_clipped_reward_record)
+                / record_period
             )
-            if eps_return is not None:
-                eval_episodic_return_list.append(eps_return)
-            if avg_reward is not None:
-                eval_average_reward_list.append(avg_reward)
-            if eps_clipped_return is not None:
-                eval_episodic_clipped_return_list.append(eps_clipped_return)
-            if avg_clipped_reward is not None:
-                eval_average_clipped_reward_list.append(avg_clipped_reward)
+            last_cum_clipped_reward_record = cum_clipped_reward
+
+            # evaluate the learned policy in the episodic and continuing versions of the environment
+            (
+                eval_episodic_return,
+                eval_average_reward,
+                eval_episodic_clipped_return,
+                eval_average_clipped_reward,
+                eval_average_reset,
+            ) = offline_eval(
+                eval_agent=eval_agent,
+                envs=envs,
+                eval_max_steps=eval_max_steps,
+                preprocessors=param_sweeper_dict["preprocessors"],
+                eval_in_episodic_env=param_sweeper_dict["eval_in_episodic_env"],
+                eval_in_continuing_env=param_sweeper_dict["eval_in_continuing_env"],
+            )
+            if eval_episodic_return is not None:
+                eval_episodic_return_list.append(eval_episodic_return)
+            if eval_average_reward is not None:
+                eval_average_reward_list.append(eval_average_reward)
+            if eval_episodic_clipped_return is not None:
+                eval_episodic_clipped_return_list.append(eval_episodic_clipped_return)
+            if eval_average_clipped_reward is not None:
+                eval_average_clipped_reward_list.append(eval_average_clipped_reward)
+            if eval_average_reset is not None:
+                eval_average_reset_list.append(eval_average_reset)
+
+            # record stats in learning report
             for key in learning_report_cache:
                 learning_report.setdefault(key, []).append(
                     np.mean(learning_report_cache[key])
                 )
 
+        # agent observes the new result of the action
+        agent.observe(action_result)
+
+        # agent learns
         assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
         if (
             steps >= param_sweeper_dict["learning_starts"]
@@ -855,41 +901,26 @@ def run_steps(
     # save all the recorded stats
     output_dir = param_sweeper_dict["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
-    np.save(
-        f"{output_dir}/{run_idx}_average_reward.npy",
-        np.array(avg_reward_list),
+    save_as_npy(
+        data={
+            "average_reward": avg_reward_list,
+            "average_reset": avg_reset_list,
+            "average_clipped_reward": avg_clipped_reward_list,
+            "eval_episodic_return": eval_episodic_return_list,
+            "eval_average_reward": eval_average_reward_list,
+            "eval_average_reset": eval_average_reset_list,
+            "eval_episodic_clipped_return": eval_episodic_clipped_return_list,
+            "eval_average_clipped_reward": eval_average_clipped_reward_list,
+        },
+        output_dir=output_dir,
+        run_idx=run_idx,
     )
-    if use_reward_clipping:
-        np.save(
-            f"{output_dir}/{run_idx}_average_clipped_reward.npy",
-            np.array(avg_clipped_reward_list),
-        )
-    if len(eval_episodic_return_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_episodic_return.npy",
-            np.array(eval_episodic_return_list),
-        )
-    if len(eval_average_reward_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_average_reward.npy",
-            np.array(eval_average_reward_list),
-        )
-    if len(eval_episodic_clipped_return_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_episodic_clipped_return.npy",
-            np.array(eval_episodic_clipped_return_list),
-        )
-    if len(eval_average_clipped_reward_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_average_clipped_reward.npy",
-            np.array(eval_average_clipped_reward_list),
-        )
     for key in learning_report:
         np.save(
             f"{output_dir}/{run_idx}_{key}.npy",
             np.array(learning_report[key]),
         )
-    if param_sweeper_dict.get("record_visited_observations", False) is True:
+    if len(visited_observations) > 0:
         np.save(
             f"{output_dir}/{run_idx}_visited_observations.npy",
             np.array(visited_observations),
@@ -912,6 +943,12 @@ def run_steps(
         else:
             raise NotImplementedError("Can not obtain last environment state!")
     return
+
+def save_as_npy(data: Dict[str, Any], output_dir: str, run_idx: int) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    for key in data:
+        if len(data[key]) > 0:
+            np.save(f"{output_dir}/{run_idx}_{key}.npy", np.array(data[key]))
 
 
 def init_class(
