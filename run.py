@@ -598,9 +598,11 @@ def run_episode(
 
 def run_episodes(
     train_agent: PearlAgent,
-    eval_episodic_agent: PearlAgent,
     eval_continuing_agent: PearlAgent,
-    envs: List[Optional[GymEnvironment]],
+    eval_episodic_agent: PearlAgent,
+    train_env: GymEnvironment,
+    eval_continuing_env: Optional[GymEnvironment],
+    eval_episodic_env: Optional[GymEnvironment],
     param_sweeper_dict: Dict[str, Any],
 ) -> None:
     print_every_x_steps = param_sweeper_dict["print_every_x_steps"]
@@ -614,8 +616,6 @@ def run_episodes(
     info = {}
     info_period = {}
     eval_episodic_return_list, eval_average_reward_list, eval_episodic_clipped_return_list, eval_average_clipped_reward_list, eval_average_reset_list = [], [], [], [], []  # noqa
-    agent = train_agent
-    env = envs[0]  # train env
     learning_report = {}
     learning_report_cache = {}
     start_time = time.time()
@@ -629,8 +629,8 @@ def run_episodes(
             break
         old_total_steps = total_steps
         episode_info, episode_total_steps = run_episode(
-            agent,
-            env,
+            train_agent,
+            train_env,
             exploit=False,
             learn_after_episode=False,  # not for this project
             learn_every_k_steps=learn_every_k_steps,
@@ -649,7 +649,7 @@ def run_episodes(
         # print stats
         if old_total_steps // print_every_x_steps < total_steps // print_every_x_steps:
             logger.info(
-                f"episode {total_episodes}, steps {total_steps}, agent={agent}, env={env}",
+                f"episode {total_episodes}, steps {total_steps}, agent={train_agent}, env={train_env}",
             )
             end_time = time.time()
             SPS = int((total_steps - last_timed_steps) / (end_time - start_time))
@@ -672,20 +672,20 @@ def run_episodes(
                     info.setdefault(key, []).append(np.mean(info_period[key]))
             info_period = {}
             # evaluate the learned policy in the episodic and continuing versions of the environment
-            if param_sweeper_dict["eval_in_episodic_env"] is True:
+            if param_sweeper_dict.get("eval_in_episodic_env", False):
                 eval_episodic_return, eval_episodic_clipped_return = offline_eval_episodic(
                     eval_episodic_agent=eval_episodic_agent,
-                    eval_episodic_env=envs[1],
+                    eval_episodic_env=eval_episodic_env,
                     eval_max_steps=eval_max_steps,
                     preprocessors=param_sweeper_dict["preprocessors"],
                 )
             else:
                 eval_episodic_return, eval_episodic_clipped_return = None, None
 
-            if param_sweeper_dict["eval_in_continuing_env"] is True:
+            if param_sweeper_dict.get("eval_in_continuing_env", False):
                 eval_average_reward, eval_average_clipped_reward, eval_average_reset = offline_eval_continuing(
                     eval_continuing_agent=eval_continuing_agent,
-                    eval_continuing_env=envs[2],
+                    eval_continuing_env=eval_continuing_env,
                     eval_max_steps=eval_max_steps,
                     preprocessors=param_sweeper_dict["preprocessors"],
                 )
@@ -760,102 +760,113 @@ def run_steps(
     train_agent: PearlAgent,
     eval_continuing_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in a continuing environment
     eval_episodic_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in an episodic environment
-    envs: List[Optional[GymEnvironment]],
+    train_env: GymEnvironment,
+    eval_continuing_env: Optional[GymEnvironment],
+    eval_episodic_env: Optional[GymEnvironment],
     param_sweeper_dict: Dict[str, Any],
 ) -> None:
+    # get the parameters
     print_every_x_steps = param_sweeper_dict["print_every_x_steps"]
     learn_every_k_steps = param_sweeper_dict["learn_every_k_steps"]
+    assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
+    learning_starts = param_sweeper_dict["learning_starts"]
     record_period = param_sweeper_dict["record_period"]
     run_idx = param_sweeper_dict["id"]
     max_steps = param_sweeper_dict["max_steps"]
     eval_max_steps = param_sweeper_dict["eval_max_steps"]
     record_visited_observations = param_sweeper_dict.get("record_visited_observations", False)
     observation_record_period = param_sweeper_dict.get("observation_record_period", 1000)
-    env = envs[0]  # train env
-    agent = train_agent
-    assert env is not None
-    observation, action_space = env.reset()
-    agent.reset(observation, action_space)
+    preprocessors = param_sweeper_dict["preprocessors"]
+    eval_in_episodic_env = param_sweeper_dict.get("eval_in_episodic_env", False)
+    eval_in_continuing_env = param_sweeper_dict.get("eval_in_continuing_env", False)
+    output_dir = param_sweeper_dict["output_dir"]
+    os.makedirs(output_dir, exist_ok=True)
 
-    # reward stats initialization
+    # record stats initialization
+    experiment_stats = {
+        "avg_reward_list": [],
+        "eval_average_reward_list": [],
+        "eval_episodic_return_list": [],
+        "avg_reset_list": [],
+        "eval_average_reset_list": [],
+        "avg_clipped_reward_list": [],
+        "eval_average_clipped_reward_list": [],
+        "eval_episodic_clipped_return_list": [],
+        "learning_report": {},
+        "visited_observations": [],
+    }
+
+    # variables used in the training loop but not recorded
     cum_reward = 0
-    avg_reward_list = []
-    last_cum_reward_print = cum_reward
-    last_cum_reward_record = cum_reward
-    eval_average_reward_list = []  # used only when eval_env_continuing is not None
-    eval_episodic_return_list = []  # used only when eval_env_episodic is not None
-
-    # reset stats initialization
     cum_reset = 0
-    avg_reset_list = []
+    cum_clipped_reward = 0
+    last_cum_reward_print = 0
+    last_cum_reward_record = 0
     last_cum_reset_print = 0
     last_cum_reset_record = 0
-    eval_average_reset_list = []
-    
-    # reward clipping stats initialization
-    cum_clipped_reward = 0
-    avg_clipped_reward_list = []
     last_cum_clipped_reward_print = 0
     last_cum_clipped_reward_record = 0
-    eval_average_clipped_reward_list = []
-    eval_episodic_clipped_return_list = []
-
-    learning_report = {}
     learning_report_cache = {}
-    start_time = time.time()
     last_timed_steps = 0
     steps = 0
 
-    visited_observations = []
+    # initialize the environment and the agent
+    assert train_env is not None
+    observation, action_space = train_env.reset()
+    train_agent.reset(observation, action_space)
 
-    # reward clipping initialization
-    use_reward_clipping = False
-    for preprocessor in param_sweeper_dict["preprocessors"]:
-        if isinstance(preprocessor, RewardClipping):
-            use_reward_clipping = True
-            break
+    start_time = time.time()
 
+    # starts the training loop
     while steps < max_steps:
         # agent takes an action
-        action = agent.act(exploit=False)
-        action = (
-            action.cpu() if isinstance(action, torch.Tensor) else action
-        )  # action can be int sometimes
+        action = train_agent.act(exploit=False)
 
         # environment receives the action and returns the result
-        action_result = env.step(action)
-
-        # update stats
-        action_result.reward += param_sweeper_dict.get("reward_offset", 0)  # shift all rewards by a constant value
-        cum_reward += action_result.reward
-        cum_reset += action_result.info.get("reset", 0)
-        for preprocessor in param_sweeper_dict["preprocessors"]:
+        action_result = train_env.step(action)
+        original_reward = action_result.reward
+        for preprocessor in preprocessors:
             preprocessor.process(action_result)
-        cum_clipped_reward += action_result.reward
-        if record_visited_observations is True and steps % observation_record_period == 0:
-            visited_observations.append(action_result.observation)
+        clipped_reward = action_result.reward
+        num_resets = action_result.info.get("num_resets", 0)
 
         steps += 1
+
+        # agent observes the new result of the action
+        train_agent.observe(action_result)
+
+        # agent learns
+        if (
+            steps >= learning_starts
+            and steps % learn_every_k_steps == 0
+        ):
+            report = train_agent.learn()
+        else:
+            report = {}
+        
+        # update stats
+        cum_reward += original_reward
+        cum_reset += num_resets
+        cum_clipped_reward += clipped_reward
+        for key in report:
+            learning_report_cache.setdefault(key, []).append(report[key])
 
         # print stats
         if steps % print_every_x_steps == 0:
             actor_loss = (
                 np.mean(learning_report_cache["actor_loss"])
                 if "actor_loss" in learning_report_cache
-                else 0
+                else None
             )
             critic_loss = (
                 np.mean(learning_report_cache["critic_loss"])
                 if "critic_loss" in learning_report_cache
-                else 0
+                else None
             )
-            message = f"steps {steps}, agent={agent}, env={env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
-            if use_reward_clipping:
-                message = (
-                    message
-                    + f", average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}"
-                )
-                last_cum_clipped_reward_print = cum_clipped_reward
+            message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, 
+            average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, 
+            average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+            last_cum_clipped_reward_print = cum_clipped_reward
             last_cum_reward_print = cum_reward
             last_cum_reset_print = cum_reset
             end_time = time.time()
@@ -865,111 +876,100 @@ def run_steps(
             start_time = end_time
             last_timed_steps = steps
 
+        # record visited observations
+        if record_visited_observations is True and steps % observation_record_period == 0:
+            experiment_stats["visited_observations"].append(observation)
+
         # record stats
         if steps % record_period == 0:
             # record the average reward over the last record_period time steps
-            avg_reward_list.append(
+            experiment_stats["avg_reward_list"].append(
                 (cum_reward - last_cum_reward_record) / record_period
             )
             last_cum_reward_record = cum_reward
 
             # record the average reset over the last record_period time steps
-            avg_reset_list.append((cum_reset - last_cum_reset_record) / record_period)
+            experiment_stats["avg_reset_list"].append((
+                cum_reset - last_cum_reset_record) / record_period
+            )
             last_cum_reset_record = cum_reset
 
             # record the average clipped reward over the last record_period time steps
-            avg_clipped_reward_list.append(
-                (cum_clipped_reward - last_cum_clipped_reward_record)
-                / record_period
+            experiment_stats["avg_clipped_reward_list"].append(
+                (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
             )
             last_cum_clipped_reward_record = cum_clipped_reward
 
-            # evaluate the learned policy in the episodic and continuing versions of the environment
-            if param_sweeper_dict["eval_in_episodic_env"] is True:
+            # evaluate the learned policy in an episodic and a continuing versions of the environment
+            if eval_in_episodic_env:
                 (
                     eval_episodic_return,
                     eval_episodic_clipped_return,
                 ) = offline_eval_episodic(
                     eval_episodic_agent=eval_episodic_agent,
-                    eval_episodic_env=envs[1],
+                    eval_episodic_env=eval_episodic_env,
                     eval_max_steps=eval_max_steps,
-                    preprocessors=param_sweeper_dict["preprocessors"],
+                    preprocessors=preprocessors,
                 )
             else:
                 eval_episodic_return = None
                 eval_episodic_clipped_return = None
-            if param_sweeper_dict["eval_in_continuing_env"] is True:
+
+            if eval_in_continuing_env:
                 (
                     eval_average_reward,
                     eval_average_clipped_reward,
                     eval_average_reset,
                 ) = offline_eval_continuing(
                     eval_continuing_agent=eval_continuing_agent,
-                    eval_continuing_env=envs[2],
+                    eval_continuing_env=eval_continuing_env,
                     eval_max_steps=eval_max_steps,
-                    preprocessors=param_sweeper_dict["preprocessors"],
+                    preprocessors=preprocessors,
                 )
             else:
                 eval_average_reward = None
                 eval_average_clipped_reward = None
                 eval_average_reset = None
+
             if eval_episodic_return is not None:
-                eval_episodic_return_list.append(eval_episodic_return)
+                experiment_stats["eval_episodic_return_list"].append(eval_episodic_return)
             if eval_average_reward is not None:
-                eval_average_reward_list.append(eval_average_reward)
+                experiment_stats["eval_average_reward_list"].append(eval_average_reward)
             if eval_episodic_clipped_return is not None:
-                eval_episodic_clipped_return_list.append(eval_episodic_clipped_return)
+                experiment_stats["eval_episodic_clipped_return_list"].append(eval_episodic_clipped_return)
             if eval_average_clipped_reward is not None:
-                eval_average_clipped_reward_list.append(eval_average_clipped_reward)
+                experiment_stats["eval_average_clipped_reward_list"].append(eval_average_clipped_reward)
             if eval_average_reset is not None:
-                eval_average_reset_list.append(eval_average_reset)
+                experiment_stats["eval_average_reset_list"].append(eval_average_reset)
 
             # record stats in learning report
             for key in learning_report_cache:
-                learning_report.setdefault(key, []).append(
+                experiment_stats["learning_report"].setdefault(key, []).append(
                     np.mean(learning_report_cache[key])
                 )
 
-        # agent observes the new result of the action
-        agent.observe(action_result)
-
-        # agent learns
-        assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
-        if (
-            steps >= param_sweeper_dict["learning_starts"]
-            and steps % learn_every_k_steps == 0
-        ):
-            report = agent.learn()
-            for key in report:
-                learning_report_cache.setdefault(key, []).append(report[key])
-
     # save all the recorded stats
-    output_dir = param_sweeper_dict["output_dir"]
-    os.makedirs(output_dir, exist_ok=True)
     save_as_npy(
         data={
-            "average_reward": avg_reward_list,
-            "average_reset": avg_reset_list,
-            "average_clipped_reward": avg_clipped_reward_list,
-            "eval_episodic_return": eval_episodic_return_list,
-            "eval_average_reward": eval_average_reward_list,
-            "eval_average_reset": eval_average_reset_list,
-            "eval_episodic_clipped_return": eval_episodic_clipped_return_list,
-            "eval_average_clipped_reward": eval_average_clipped_reward_list,
+            "average_reward": experiment_stats["avg_reward_list"],
+            "average_reset": experiment_stats["avg_reset_list"],
+            "average_clipped_reward": experiment_stats["avg_clipped_reward_list"],
+            "eval_episodic_return": experiment_stats["eval_episodic_return_list"],
+            "eval_average_reward": experiment_stats["eval_average_reward_list"],
+            "eval_average_reset": experiment_stats["eval_average_reset_list"],
+            "eval_episodic_clipped_return": experiment_stats["eval_episodic_clipped_return_list"],
+            "eval_average_clipped_reward": experiment_stats["eval_average_clipped_reward_list"],
+            "visited_observations": experiment_stats["visited_observations"],
         },
         output_dir=output_dir,
         run_idx=run_idx,
     )
-    for key in learning_report:
+    for key in experiment_stats["learning_report"]:
         np.save(
             f"{output_dir}/{run_idx}_{key}.npy",
-            np.array(learning_report[key]),
+            np.array(experiment_stats["learning_report"][key]),
         )
-    if len(visited_observations) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_visited_observations.npy",
-            np.array(visited_observations),
-        )
+
     # save game states so that we can visualize the behavior of the agent after training
     # by running the learned policy starting from the saved game state
     if (
@@ -1072,7 +1072,6 @@ if __name__ == "__main__":
     project_root: str = os.path.abspath(os.path.dirname(__file__))
     # pyre-fixme
     param_sweeper = Sweeper(os.path.join(project_root, args.config_file))
-    envs_configs = ["env", "eval_env_episodic", "eval_env_continuing"]
     agents: List[PearlAgent] = []
     envs: List[Optional[GymEnvironment]] = []
     run_id: int = int(args.base_id)
@@ -1098,6 +1097,7 @@ if __name__ == "__main__":
     Initialize the environment
     """
 
+    envs_configs = ["env", "eval_env_episodic", "eval_env_continuing"]
     for i in range(3):
         # envs[0]: training agent and env
         # envs[1]: evaluated in episodic env
@@ -1115,7 +1115,10 @@ if __name__ == "__main__":
         envs.append(env)
 
     # pyre-fixme
-    env: GymEnvironment = envs[0]  # training environment
+    train_env: GymEnvironment = envs[0]  # training environment
+    eval_episodic_env: Optional[GymEnvironment] = envs[1]  # evaluated in episodic env
+    eval_continuing_env: Optional[GymEnvironment] = envs[2]  # evaluated in continuing env
+    
     param_sweeper_dict["action_space"] = env.action_space
     param_sweeper_dict["preprocessors"] = []
     if isinstance(env.action_space, DiscreteActionSpace):
@@ -1141,7 +1144,7 @@ if __name__ == "__main__":
     ):
         param_sweeper_dict["preprocessors"].append(
             # pyre-fixme
-            ObservationNormalization(envs[0].observation_space.shape)
+            ObservationNormalization(train_env.observation_space.shape)
         )
 
     """
@@ -1577,7 +1580,7 @@ if __name__ == "__main__":
             )
         evaluate(
             agent=train_agent,
-            env=envs[2] if envs[2] is not None else envs[0],
+            env=eval_continuing_env if eval_continuing_env is not None else train_env,
             render=args.render,
             output_dir=args.out_dir,
             video_dir=args.out_dir + param_sweeper_dict["video_folder"],
@@ -1594,9 +1597,25 @@ if __name__ == "__main__":
         if param_sweeper_dict["env"][0]["is_continuing"] or param_sweeper_dict.get(
             "run_steps", False
         ):
-            run_steps(train_agent, eval_continuing_agent, eval_episodic_agent, envs, param_sweeper_dict)
+            run_steps(
+                train_agent, 
+                eval_continuing_agent, 
+                eval_episodic_agent, 
+                train_env, 
+                eval_continuing_env, 
+                eval_episodic_env, 
+                param_sweeper_dict
+            )
         else:
-            run_episodes(train_agent, eval_continuing_agent, eval_episodic_agent, envs, param_sweeper_dict)
+            run_episodes(
+                train_agent, 
+                eval_continuing_agent, 
+                eval_episodic_agent, 
+                train_env, 
+                eval_continuing_env, 
+                eval_episodic_env, 
+                param_sweeper_dict
+            )
 
         if param_sweeper_dict["save_model"]:
             assert (
