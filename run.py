@@ -504,13 +504,14 @@ def run_episode(
     learn_after_episode: bool = False,
     learn_every_k_steps: int = 1,
     total_steps: int = 0,
-    seed: Optional[int] = None,
     learn: bool = True,
     learning_start: int = 0,
     preprocessors: Optional[List[Preprocessor]] = None,
     learning_report_cache: Optional[Dict[str, List[float]]] = None,
     number_of_steps: Optional[int] = None,
     visited_observations: Optional[List[Any]] = None,
+    record_visited_observations: bool = False,
+    observation_record_period: int = 1000,
 ) -> Tuple[Dict[str, Any], int]:
     """
     Runs one episode and returns an info dict and number of steps taken.
@@ -524,22 +525,14 @@ def run_episode(
                                               the end of the episode. Defaults to False.
         learn_every_k_steps (int, optional): asks the agent to learn every k steps.
         total_steps (int, optional): the total number of steps taken so far. Defaults to 0.
-        seed (int, optional): the seed for the environment. Defaults to None.
     Returns:
         Tuple[Dict[str, Any], int]: the return of the episode and the number of steps taken.
     """
     observation, action_space = env.reset()
     agent.reset(observation, action_space)
     cum_reward = 0
+    cum_clipped_reward = 0
 
-    # reward clipping initialization
-    use_reward_clipping = False
-    for preprocessor in preprocessors:
-        if isinstance(preprocessor, RewardClipping):
-            use_reward_clipping = True
-            break
-    if use_reward_clipping:
-        cum_clipped_reward = 0
     done = False
     episode_steps = 0
     info = {}
@@ -553,36 +546,43 @@ def run_episode(
 
         # the environment receives the action and returns the result
         action_result = env.step(action)
-        if visited_observations is not None and total_steps + episode_steps % 1000 == 0:
-            visited_observations.append(action_result.observation)
-        if "episode" in action_result.info:
-            logger.info(action_result.info["episode"]["r"])
-            info["full_return"] = action_result.info["episode"]["r"]
-        cum_reward += action_result.reward
+        original_reward = action_result.reward
         for preprocessor in preprocessors:
             preprocessor.process(action_result)
-        if use_reward_clipping:
-            cum_clipped_reward += action_result.reward
+        clipped_reward = action_result.reward
 
         # the agent observes the result
         agent.observe(action_result)
 
         done = action_result.truncated or action_result.terminated
         episode_steps += 1
+        
+        # learn
         if learn and total_steps + episode_steps >= learning_start:
             if learn_after_episode:
                 # when learn_after_episode is True, we learn only at the end of the episode,
                 # regardless of the value of learn_every_k_steps.
                 if done:
                     report = agent.learn()
-                    for key in report:
-                        learning_report_cache.setdefault(key, []).append(report[key])
+                else:
+                    report = {}
             else:
                 assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
                 if (total_steps + episode_steps) % learn_every_k_steps == 0:
                     report = agent.learn()
-                    for key in report:
-                        learning_report_cache.setdefault(key, []).append(report[key])
+                else:
+                    report = {}
+
+        # update stats
+        cum_reward += original_reward
+        cum_clipped_reward += clipped_reward
+
+        # record stats
+        for key in report:
+            learning_report_cache.setdefault(key, []).append(report[key])
+        if record_visited_observations and (total_steps + episode_steps) % observation_record_period == 0:
+            visited_observations.append(action_result.observation)
+
         if (
             number_of_steps is not None
             and total_steps + episode_steps >= number_of_steps
@@ -590,8 +590,13 @@ def run_episode(
             break
 
     info["return"] = cum_reward
-    if use_reward_clipping:
-        info["clipped_return"] = cum_clipped_reward
+    info["clipped_return"] = cum_clipped_reward
+    if "episode" in action_result.info:
+        # in Atari games, we terminate the episode when the agent loses a life
+        # Each game has multiple lives. Sometimes we care about the total return accumulated over all lives.
+        # This is saved in info["full_return"]. 
+        logger.info(action_result.info["episode"]["r"])
+        info["full_return"] = action_result.info["episode"]["r"]
 
     return info, episode_steps
 
@@ -611,6 +616,8 @@ def run_episodes(
     run_idx = param_sweeper_dict["id"]
     number_of_steps = param_sweeper_dict["max_steps"]
     eval_max_steps = param_sweeper_dict["eval_max_steps"]
+    record_visited_observations = param_sweeper_dict.get("record_visited_observations", False)
+    observation_record_period = param_sweeper_dict.get("observation_record_period", 1000)
     total_steps = 0
     total_episodes = 0
     info = {}
@@ -620,13 +627,9 @@ def run_episodes(
     learning_report_cache = {}
     start_time = time.time()
     last_timed_steps = 0
-    if param_sweeper_dict.get("record_visited_observations", False) is True:
-        visited_observations = []
-    else:
-        visited_observations = None
-    while True:
-        if total_steps >= number_of_steps:
-            break
+    visited_observations = []
+
+    while total_steps < number_of_steps:
         old_total_steps = total_steps
         episode_info, episode_total_steps = run_episode(
             train_agent,
@@ -641,6 +644,8 @@ def run_episodes(
             learning_report_cache=learning_report_cache,
             number_of_steps=number_of_steps,
             visited_observations=visited_observations,
+            record_visited_observations=record_visited_observations,
+            observation_record_period=observation_record_period,
         )
 
         total_steps += episode_total_steps
@@ -710,50 +715,19 @@ def run_episodes(
 
     output_dir = param_sweeper_dict["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
-    for key in info:
-        if key == "return":
-            np.save(f"{output_dir}/{run_idx}_episodic_return.npy", info[key])
-        if key == "clipped_return":
-            np.save(f"{output_dir}/{run_idx}_episodic_clipped_return.npy", info[key])
-        if key == "full_return":
-            np.save(f"{output_dir}/{run_idx}_episodic_full_return.npy", info[key])
-    if len(eval_episodic_return_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_episodic_return.npy",
-            np.array(eval_episodic_return_list),
-        )
-    if len(eval_average_reward_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_average_reward.npy",
-            np.array(eval_average_reward_list),
-        )
-
-    if len(eval_episodic_clipped_return_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_episodic_clipped_return.npy",
-            np.array(eval_episodic_clipped_return_list),
-        )
-    if len(eval_average_clipped_reward_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_average_clipped_reward.npy",
-            np.array(eval_average_clipped_reward_list),
-        )
-    if len(eval_average_reset_list) > 0:
-        np.save(
-            f"{output_dir}/{run_idx}_eval_average_reset.npy",
-            np.array(eval_average_reset_list),
-        )
-
-    for key in learning_report:
-        np.save(
-            f"{output_dir}/{run_idx}_{key}.npy",
-            np.array(learning_report[key]),
-        )
-    if param_sweeper_dict.get("record_visited_observations", False) is True:
-        np.save(
-            f"{output_dir}/{run_idx}_visited_observations.npy",
-            np.array(visited_observations),
-        )
+    
+    # save stats
+    save_data_dict = {
+        "eval_episodic_return": eval_episodic_return_list,
+        "eval_average_reward": eval_average_reward_list,
+        "eval_episodic_clipped_return": eval_episodic_clipped_return_list,
+        "eval_average_clipped_reward": eval_average_clipped_reward_list,
+        "eval_average_reset": eval_average_reset_list,
+        "visited_observations": visited_observations,
+    }
+    save_data_dict.update(info)
+    save_data_dict.update(learning_report)
+    save_as_npy(data=save_data_dict, output_dir=output_dir, run_idx=run_idx)
 
 
 def run_steps(
@@ -949,26 +923,24 @@ def run_steps(
                 )
 
     # save all the recorded stats
+    save_data_dict = {
+        "average_reward": experiment_stats["avg_reward_list"],
+        "average_reset": experiment_stats["avg_reset_list"],
+        "average_clipped_reward": experiment_stats["avg_clipped_reward_list"],
+        "eval_episodic_return": experiment_stats["eval_episodic_return_list"],
+        "eval_average_reward": experiment_stats["eval_average_reward_list"],
+        "eval_average_reset": experiment_stats["eval_average_reset_list"],
+        "eval_episodic_clipped_return": experiment_stats["eval_episodic_clipped_return_list"],
+        "eval_average_clipped_reward": experiment_stats["eval_average_clipped_reward_list"],
+        "visited_observations": experiment_stats["visited_observations"],
+    }
+    save_data_dict.update(experiment_stats["learning_report"])  # assume no overlap in keys
+
     save_as_npy(
-        data={
-            "average_reward": experiment_stats["avg_reward_list"],
-            "average_reset": experiment_stats["avg_reset_list"],
-            "average_clipped_reward": experiment_stats["avg_clipped_reward_list"],
-            "eval_episodic_return": experiment_stats["eval_episodic_return_list"],
-            "eval_average_reward": experiment_stats["eval_average_reward_list"],
-            "eval_average_reset": experiment_stats["eval_average_reset_list"],
-            "eval_episodic_clipped_return": experiment_stats["eval_episodic_clipped_return_list"],
-            "eval_average_clipped_reward": experiment_stats["eval_average_clipped_reward_list"],
-            "visited_observations": experiment_stats["visited_observations"],
-        },
+        data=save_data_dict,
         output_dir=output_dir,
         run_idx=run_idx,
     )
-    for key in experiment_stats["learning_report"]:
-        np.save(
-            f"{output_dir}/{run_idx}_{key}.npy",
-            np.array(experiment_stats["learning_report"][key]),
-        )
 
     # save game states so that we can visualize the behavior of the agent after training
     # by running the learned policy starting from the saved game state
