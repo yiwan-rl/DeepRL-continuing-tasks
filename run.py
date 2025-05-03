@@ -1034,6 +1034,10 @@ if __name__ == "__main__":
     train_env: GymEnvironment = envs[0]  # training environment
     eval_episodic_env: Optional[GymEnvironment] = envs[1]  # evaluated in episodic env
     eval_continuing_env: Optional[GymEnvironment] = envs[2]  # evaluated in continuing env
+
+    # make sure the three environments have the same size of state and action spaces
+    assert train_env.observation_space.shape == eval_episodic_env.observation_space.shape == eval_continuing_env.observation_space.shape
+    assert train_env.action_space.shape == eval_episodic_env.action_space.shape == eval_continuing_env.action_space.shape
     
     param_sweeper_dict["action_space"] = env.action_space
     param_sweeper_dict["preprocessors"] = []
