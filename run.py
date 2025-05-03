@@ -291,87 +291,6 @@ def generate_video(imgs: List[np.ndarray], save_folder: str, video_name: str) ->
         os.remove(file_name)
 
 
-def evaluate(
-    agent,
-    env,
-    output_dir,
-    video_dir,
-    name,
-    render,
-    max_steps,
-    run_idx,
-    preprocessors,
-    qpos=None,  # for mujoco env
-    # pyre-fixme
-    qvel=None,  # for mujoco env
-) -> None:
-
-    # evaluate the agent in the continuing version of the environment
-    logger.info(f"evaluating {name}, run {run_idx}")
-    if hasattr(agent.policy_learner.exploration_module, "set_test_time_true"):
-        # Do not change counter in the exploration module during evaluation
-        # pyre-fixme
-        agent.policy_learner.exploration_module.set_test_time_true()
-    if hasattr(agent.policy_learner, "_test_time"):
-        agent.policy_learner._test_time = True
-    for p in preprocessors:
-        if hasattr(p, "_test_time"):
-            # pyre-fixme
-            p._test_time = True
-
-    observation, action_space = env.reset()
-    if qpos is not None and qvel is not None:
-        env.env.set_state(qpos, qvel)
-    print_every_x_steps = 1000
-    last_cum_reward_print = 0
-    last_cum_reset_print = 0
-    eval_cum_reward = 0
-    eval_cum_reward_no_reset_cost = 0
-    eval_cum_reset = 0
-    frames = []
-    agent.reset(observation, action_space)
-
-    for step in range(1, max_steps + 1):
-        if render is True:
-            frames.append(env.env.render())
-        action = agent.act(exploit=False)
-        action = (
-            action.cpu() if isinstance(action, torch.Tensor) else action
-        )  # action can be int sometimes
-        action_result = env.step(action)
-        for preprocessor in preprocessors:
-            preprocessor.process(action_result)
-        eval_cum_reward += action_result.reward
-        if "reset" in action_result.info:
-            eval_cum_reset += action_result.info["reset"]
-        if action_result.info["reset"] == False:
-            eval_cum_reward_no_reset_cost += action_result.reward
-        agent.observe(action_result)
-        if step % print_every_x_steps == 0:
-            logger.info(
-                f"step {step}, agent={agent}, name={name}, average_reward={(eval_cum_reward - last_cum_reward_print) / print_every_x_steps}, average_reset={(eval_cum_reset - last_cum_reset_print) / print_every_x_steps}",
-            )
-            last_cum_reward_print = eval_cum_reward
-            last_cum_reset_print = eval_cum_reset
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    if not os.path.exists(video_dir):
-        os.makedirs(video_dir)
-    if render is True:
-        generate_video(frames, video_dir, video_name=name + "_" + str(run_idx))
-    logger.info(f"{output_dir}/{run_idx}_final.npy")
-    np.save(
-        f"{output_dir}/{run_idx}_final.npy",
-        np.array(
-            [
-                eval_cum_reward / max_steps,
-                eval_cum_reward_no_reset_cost / max_steps,
-                eval_cum_reset,
-            ]
-        ),
-    )
-    return None
-
 def set_test_time_true(policy_learner: PolicyLearner, preprocessors: List[Preprocessor]) -> None:
     if hasattr(policy_learner.exploration_module, "set_test_time_true"):
         # Do not change counter in the exploration module during evaluation
@@ -386,6 +305,7 @@ def set_test_time_true(policy_learner: PolicyLearner, preprocessors: List[Prepro
             # pyre-fixme
             p._test_time = True
 
+
 def set_test_time_false(policy_learner: PolicyLearner, preprocessors: List[Preprocessor]) -> None:
     if hasattr(policy_learner.exploration_module, "set_test_time_false"):
         # pyre-fixme
@@ -397,11 +317,17 @@ def set_test_time_false(policy_learner: PolicyLearner, preprocessors: List[Prepr
             p._test_time = False
 
 
-def offline_eval_continuing(
+def eval_continuing(
     eval_continuing_agent: PearlAgent,
     eval_continuing_env: GymEnvironment,
     eval_max_steps: int,
     preprocessors: List[Preprocessor],
+    render: bool = False,
+    video_dir: Optional[str] = None,
+    video_name: Optional[str] = None,
+    run_idx: Optional[int] = None,
+    qpos: Optional[np.ndarray] = None,
+    qvel: Optional[np.ndarray] = None,
 ) -> Tuple[
     float, float, float
 ]:
@@ -411,15 +337,17 @@ def offline_eval_continuing(
     # pyre-fixme
     assert eval_continuing_env is not None
     observation, action_space = eval_continuing_env.reset()
+    if qpos is not None and qvel is not None:
+        # for mujoco env, if qpos and qvel are not None, we set the state of the environment
+        eval_continuing_env.env.set_state(qpos, qvel)
     eval_continuing_agent.reset(observation, action_space)
     eval_cum_reward, eval_cum_reset, eval_cum_clipped_reward = 0, 0, 0
-
+    frames = []
     for _ in range(1, eval_max_steps + 1):
+        if render is True:
+            frames.append(eval_continuing_env.env.render())
         # the agent takes an action
         action = eval_continuing_agent.act(exploit=False)
-        action = (
-            action.cpu() if isinstance(action, torch.Tensor) else action
-        )  # action can be int sometimes
 
         # the environment receives the action and returns the result
         # pyre-fixme
@@ -441,20 +369,28 @@ def offline_eval_continuing(
 
     # recover from testing to training
     logger.info(
-        f"offline eval continuing, avg reward {avg_reward}, avg clipped reward {avg_clipped_reward}, avg reset {avg_reset}"
+        f"eval continuing, avg reward {avg_reward}, avg clipped reward {avg_clipped_reward}, avg reset {avg_reset}"
     )
 
     # recover from evaluation to training
     set_test_time_false(eval_continuing_agent.policy_learner, preprocessors)
-
+    if render is True:
+        assert video_dir is not None and video_name is not None and run_idx is not None
+        if not os.path.exists(video_dir):
+            os.makedirs(video_dir)
+        generate_video(frames, video_dir, video_name=video_name + "_" + str(run_idx))
     return avg_reward, avg_clipped_reward, avg_reset
 
 
-def offline_eval_episodic(
+def eval_episodic(
     eval_episodic_agent: PearlAgent,
     eval_episodic_env: GymEnvironment,
     eval_max_steps: int,
     preprocessors: List[Preprocessor],
+    render: bool = False,
+    video_dir: Optional[str] = None,
+    video_name: Optional[str] = None,
+    run_idx: Optional[int] = None,
 ) -> Tuple[
     float, float
 ]:
@@ -468,6 +404,7 @@ def offline_eval_episodic(
     episode_steps = 0
     total_steps = 0
     eps_return = 0
+    frames = []
     while total_steps < eval_max_steps:
         info, episode_steps = run_episode(
             agent=eval_episodic_agent,
@@ -478,7 +415,9 @@ def offline_eval_episodic(
             preprocessors=preprocessors,
             total_steps=total_steps,
             number_of_steps=eval_max_steps,
+            render=render,
         )
+        frames.extend(info["frames"])
         total_steps += episode_steps
         eps_return_list.append(info["return"])
         if "clipped_return" in info:
@@ -490,10 +429,14 @@ def offline_eval_episodic(
         eps_clipped_return = None
     # recover from testing to training
     logger.info(
-        f"offline eval episodic, epsodic return {eps_return}, episodic clipped return {eps_clipped_return}"
+        f"eval episodic, epsodic return {eps_return}, episodic clipped return {eps_clipped_return}"
     )
     set_test_time_false(eval_episodic_agent.policy_learner, preprocessors)
-
+    if render:
+        assert video_dir is not None and video_name is not None and run_idx is not None
+        if not os.path.exists(video_dir):
+            os.makedirs(video_dir)
+        generate_video(frames, video_dir, video_name=video_name + "_" + str(run_idx))
     return eps_return, eps_clipped_return
 
 
@@ -512,6 +455,7 @@ def run_episode(
     visited_observations: Optional[List[Any]] = None,
     record_visited_observations: bool = False,
     observation_record_period: int = 1000,
+    render: bool = False,
 ) -> Tuple[Dict[str, Any], int]:
     """
     Runs one episode and returns an info dict and number of steps taken.
@@ -536,13 +480,12 @@ def run_episode(
     done = False
     episode_steps = 0
     info = {}
-
+    frames = []
     while not done:
+        if render:
+            frames.append(env.render())
         # the agent takes an action
         action = agent.act(exploit=exploit)
-        action = (
-            action.cpu() if isinstance(action, torch.Tensor) else action
-        )  # action can be int sometimes
 
         # the environment receives the action and returns the result
         action_result = env.step(action)
@@ -597,11 +540,12 @@ def run_episode(
         # This is saved in info["full_return"]. 
         logger.info(action_result.info["episode"]["r"])
         info["full_return"] = action_result.info["episode"]["r"]
-
+    if render:
+        info["frames"] = frames
     return info, episode_steps
 
 
-def run_episodes(
+def train_episodic(
     train_agent: PearlAgent,
     eval_continuing_agent: PearlAgent,
     eval_episodic_agent: PearlAgent,
@@ -667,8 +611,8 @@ def run_episodes(
         for key in episode_info:
             info_period.setdefault(key, []).append(episode_info[key])
         if old_total_steps // record_period < total_steps // record_period:
-
-            # record average info value every record_period steps
+            # multiple record_periods may pass between old_total_steps and total_steps
+            # duplicate the recording to simulate recording every record_period steps
             num_repeating_recordings = (total_steps // record_period) - (
                 old_total_steps // record_period
             )
@@ -678,7 +622,7 @@ def run_episodes(
             info_period = {}
             # evaluate the learned policy in the episodic and continuing versions of the environment
             if param_sweeper_dict.get("eval_in_episodic_env", False):
-                eval_episodic_return, eval_episodic_clipped_return = offline_eval_episodic(
+                eval_episodic_return, eval_episodic_clipped_return = eval_episodic(
                     eval_episodic_agent=eval_episodic_agent,
                     eval_episodic_env=eval_episodic_env,
                     eval_max_steps=eval_max_steps,
@@ -688,7 +632,7 @@ def run_episodes(
                 eval_episodic_return, eval_episodic_clipped_return = None, None
 
             if param_sweeper_dict.get("eval_in_continuing_env", False):
-                eval_average_reward, eval_average_clipped_reward, eval_average_reset = offline_eval_continuing(
+                eval_average_reward, eval_average_clipped_reward, eval_average_reset = eval_continuing(
                     eval_continuing_agent=eval_continuing_agent,
                     eval_continuing_env=eval_continuing_env,
                     eval_max_steps=eval_max_steps,
@@ -730,7 +674,7 @@ def run_episodes(
     save_as_npy(data=save_data_dict, output_dir=output_dir, run_idx=run_idx)
 
 
-def run_steps(
+def train_continuing(
     train_agent: PearlAgent,
     eval_continuing_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in a continuing environment
     eval_episodic_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in an episodic environment
@@ -879,7 +823,7 @@ def run_steps(
                 (
                     eval_episodic_return,
                     eval_episodic_clipped_return,
-                ) = offline_eval_episodic(
+                ) = eval_episodic(
                     eval_episodic_agent=eval_episodic_agent,
                     eval_episodic_env=eval_episodic_env,
                     eval_max_steps=eval_max_steps,
@@ -894,7 +838,7 @@ def run_steps(
                     eval_average_reward,
                     eval_average_clipped_reward,
                     eval_average_reset,
-                ) = offline_eval_continuing(
+                ) = eval_continuing(
                     eval_continuing_agent=eval_continuing_agent,
                     eval_continuing_env=eval_continuing_env,
                     eval_max_steps=eval_max_steps,
@@ -1034,7 +978,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu-id", default=-1)
     parser.add_argument("--base-id", default=0)
     parser.add_argument(
-        "--config-file", default="experiments/refactor/no_resets_mujoco/inputs.json"
+        "--config-file", default="experiments/new_exps/mujoco_no_resets/inputs.json"
     )
     parser.add_argument("--out-dir", default="/tmp/pearl")
     parser.add_argument("--eval-agent", action="store_true")
@@ -1518,7 +1462,7 @@ if __name__ == "__main__":
         return an_eval_agent
 
     if args.eval_agent:
-        # only render videos, do not perform learning
+        # load and evaluate a model and generate videos
         assert (
             "model_folder" in param_sweeper_dict
         ), "model_folder not found in param_sweeper_dict"
@@ -1550,26 +1494,39 @@ if __name__ == "__main__":
             train_agent.policy_learner.exploration_module.curr_epsilon = (
                 train_agent.policy_learner.exploration_module.end_epsilon
             )
-        evaluate(
-            agent=train_agent,
-            env=eval_continuing_env if eval_continuing_env is not None else train_env,
-            render=args.render,
-            output_dir=args.out_dir,
-            video_dir=args.out_dir + param_sweeper_dict["video_folder"],
-            name=training_env_name + "_" + param_sweeper_dict["policy_learner:type"],
-            max_steps=param_sweeper_dict["eval_max_steps"],
-            run_idx=run_id,
-            preprocessors=param_sweeper_dict["preprocessors"],
-        )
+        if eval_continuing_env:
+            eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+            eval_avg_reward, eval_avg_clipped_reward, eval_avg_reset = eval_continuing(
+                eval_continuing_agent=eval_continuing_agent,
+                eval_continuing_env=eval_continuing_env,
+                render=args.render,
+                video_dir=args.out_dir + param_sweeper_dict["video_folder"],
+                name=training_env_name + "_" + param_sweeper_dict["policy_learner:type"],
+                max_steps=param_sweeper_dict["eval_max_steps"],
+                run_idx=run_id,
+                preprocessors=param_sweeper_dict["preprocessors"],
+            )
+        if eval_episodic_env:
+            eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+            eval_episodic_return, eval_episodic_clipped_return = eval_episodic(
+                eval_episodic_agent=eval_episodic_agent,
+                eval_episodic_env=eval_episodic_env,
+                render=args.render,
+                video_dir=args.out_dir + param_sweeper_dict["video_folder"],
+                name=training_env_name + "_" + param_sweeper_dict["policy_learner:type"],
+                max_steps=param_sweeper_dict["eval_max_steps"],
+                run_idx=run_id,
+                preprocessors=param_sweeper_dict["preprocessors"],
+            )
     else:
         # create two copies of the agent, one for continuing and one for episodic evaluation
         eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
         eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
 
         if param_sweeper_dict["env"][0]["is_continuing"] or param_sweeper_dict.get(
-            "run_steps", False
+            "train_continuing", False
         ):
-            run_steps(
+            train_continuing(
                 train_agent, 
                 eval_continuing_agent, 
                 eval_episodic_agent, 
@@ -1579,7 +1536,7 @@ if __name__ == "__main__":
                 param_sweeper_dict
             )
         else:
-            run_episodes(
+            train_episodic(
                 train_agent, 
                 eval_continuing_agent, 
                 eval_episodic_agent, 
