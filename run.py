@@ -1486,12 +1486,6 @@ if __name__ == "__main__":
         an_eval_agent.policy_learner = a_train_agent.policy_learner
         # pyre-fixme
         an_eval_agent.replay_buffer = a_train_agent.replay_buffer.__class__(capacity=0)
-        if hasattr(an_eval_agent.policy_learner.exploration_module, "set_test_time_true"):
-            # Do not change counter in the exploration module during evaluation
-            # pyre-fixme
-            an_eval_agent.policy_learner.exploration_module.set_test_time_true()
-        if hasattr(an_eval_agent.policy_learner, "_test_time"):
-            an_eval_agent.policy_learner._test_time = True
         return an_eval_agent
 
     if args.eval_agent:
