@@ -23,7 +23,7 @@ Discrete control: DQN, SAC, PPO
 The codebase has several experiment folders, each of which includes a file ```inputs.json```, which specifies a set of experiment configurations. This configuration file is compatible with AlphaEx's sweeper for configuration sweeping. https://github.com/AmiiThinks/AlphaEx?tab=readme-ov-file#sweeper explains how to understand the configuration file. Running experiments given these configurations gives experiment results. The table below shows the correspondence between these folders and the figures/tables in the paper summarizing the experiment results.
 
 | Experiment folder | Description |
-|---------------|---------------------------|-------------------------|
+|---------------|---------------------------|
 | ```experiments/mujoco_no_resets/``` | mujoco tasks without resets |
 | ```experiments/mujoco_predefined_resets/``` | mujoco tasks with predefined resets |
 | ```experiments/mujoco_agent_resets/``` | mujoco tasks with agent resets |
