@@ -187,12 +187,11 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
 
 def env_supports_termination_when_unhealthy(env_name: str) -> bool:
     return (
-        "Ant-" in env_name
-        or "AntNew-" in env_name
-        or "SpecialAnt-" in env_name
-        or "Hopper-" in env_name
-        or "Walker2d-" in env_name
-        or "Humanoid-" in env_name
+        env_name.startswith("Ant-")
+        or env_name.startswith("AntNew-")
+        or env_name.startswith("Hopper-")
+        or env_name.startswith("Walker2d-")
+        or env_name.startswith("Humanoid-")
     )
 
 
@@ -247,7 +246,7 @@ def get_gym_env(env_config: Dict[str, Any]) -> gym.Env:
             env_name.replace("SpecialAnt-", "Ant-"),
             xml_file="special_ant.xml",
             render_mode=render_mode,
-            terminate_when_unhealthy=terminate_when_unhealthy,
+            terminate_when_unhealthy=False,
         )
     elif "ALE/" in env_name or "NoFrameskip" in env_name:
         # Atari envs
@@ -1007,7 +1006,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu-id", default=-1)
     parser.add_argument("--base-id", default=0)
     parser.add_argument(
-        "--config-file", default="experiments/new_exps/mujoco_no_resets/inputs.json"
+        "--config-file", default="experiments/mujoco_no_resets/inputs.json"
     )
     parser.add_argument("--out-dir", default="/tmp/pearl")
     parser.add_argument("--eval-agent", action="store_true")
@@ -1149,6 +1148,7 @@ if __name__ == "__main__":
         if "exploration_module:std_dev" in param_sweeper_dict and isinstance(
             param_sweeper_dict["exploration_module:std_dev"], list
         ):
+            # if std_dev is specified and has two values, the first value is the noise for all dimensions, except the last dimension, and the second value is the noise for the last dimension
             assert isinstance(env.action_space, BoxActionSpace)
             assert len(param_sweeper_dict["exploration_module:std_dev"]) == 2
             tmp: torch.Tensor = (
@@ -1577,9 +1577,10 @@ if __name__ == "__main__":
             assert (
                 "model_folder" in param_sweeper_dict
             ), "model_folder not found in param_sweeper_dict"
+            if not os.path.exists(param_sweeper_dict["model_folder"]):
+                os.makedirs(param_sweeper_dict["model_folder"])
             model_path = args.out_dir + param_sweeper_dict["model_folder"] + str(run_id)
-            if not os.path.exists(model_path):
-                os.makedirs(model_path)
+            print(f"Saving model to {model_path}")
             train_agent.policy_learner.save_model(path=model_path)
 
             for p in param_sweeper_dict["preprocessors"]:

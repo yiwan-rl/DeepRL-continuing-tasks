@@ -6,19 +6,18 @@
 
 import gymnasium as gym
 import numpy as np
-
+import random
 
 class ReacherWrapper(gym.Wrapper):
-    r"""wrapper for reacher. We reset the target position every 50 steps."""
+    r"""wrapper for reacher. We reset the target position every 100 steps."""
 
     def __init__(self, env):
         super(ReacherWrapper, self).__init__(env)
-        self.step_cnt = 0
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        self.step_cnt += 1
-        if self.step_cnt % 50 == 0:  # reset the target position.
+        target_position_reset = random.random() < 0.01
+        if target_position_reset:
             while True:
                 self.env.unwrapped.goal = self.env.unwrapped.np_random.uniform(
                     low=-0.2, high=0.2, size=2
