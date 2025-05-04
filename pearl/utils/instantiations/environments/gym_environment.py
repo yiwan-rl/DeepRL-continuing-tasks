@@ -77,12 +77,7 @@ class GymEnvironment(Environment):
             env = env_or_env_name
         self.env: gym.Env = env
         self._action_space: ActionSpace = _get_pearl_space(
-            gym_space=(
-                # pyre-fixme
-                self.env.augmented_action_space
-                if hasattr(self.env, "augmented_action_space")
-                else self.env.action_space
-            ),
+            gym_space=self.env.action_space,
             gym_to_pearl_map=GYM_TO_PEARL_ACTION_SPACE,
         )
         self._observation_space: Space = _get_pearl_space(
@@ -125,12 +120,7 @@ class GymEnvironment(Environment):
         # Convert action to the format expected by Gymnasium
         effective_action = _get_gym_action(
             pearl_action=action,
-            gym_space=(
-                # pyre-fixme
-                self.env.augmented_action_space
-                if hasattr(self.env, "augmented_action_space")
-                else self.env.action_space
-            ),
+            gym_space=self.env.action_space,
         )
         # Take a step in the environment and receive an action result
         gym_action_result = self.env.step(effective_action)

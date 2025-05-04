@@ -85,6 +85,10 @@ class PearlAgent(Agent):
         ):
             action = self.policy_learner.action_post_processing(action)
 
+        action = (
+            action.cpu() if isinstance(action, torch.Tensor) else action
+        )  # action can be int sometimes
+        
         return action
 
     def observe(

@@ -91,7 +91,6 @@ from pearl.replay_buffers import (
 )
 
 from pearl.user_envs.wrappers import (
-    AgentResetWrapper,
     EpisodicLifeEnv,
     FireResetEnv,
     HalfCheetahWrapper,
@@ -99,8 +98,12 @@ from pearl.user_envs.wrappers import (
     NoopResetEnv,
     PusherWrapper,
     ReacherWrapper,
-    ResetWrapper,
     SwimmerWrapper,
+    AdditionalActionWrapper,
+    AgentResetWrapper,
+    EpisodicTaskAddCostWrapper,
+    EpisodicToContinuingWrapper,
+    RandomResetWrapper,
 )
 from pearl.utils.functional_utils.learning.preprocessing import (
     ObservationNormalization,
@@ -134,26 +137,51 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
     """
     env_config = env_config[0]
 
-    if env_config.get("reset_cost_wrapper", False):
+    if env_config.get("random_reset_wrapper", False):
+        # create an evironment that randomly resets with a probability of reset_prob
         return GymEnvironment(
-            ResetWrapper(
+            RandomResetWrapper(
                 env=get_gym_env(env_config),
-                random_reset_prob=env_config.get("random_reset_prob", None),
-                reset_cost=env_config.get("reset_cost", None),
-                is_continuing=env_config.get("is_continuing", None),
+                reset_prob=env_config.get("reset_prob", None),
             )
         )
+    else:
+        env = get_gym_env(env_config)
 
-    if env_config.get("agent_reset_cost_wrapper", False):
+    if env_config.get("additional_action_wrapper", False):
+        # this additional action dimension/action can be used to control resetting
+        env = AdditionalActionWrapper(
+            env=env,
+        )
+
+    if env_config.get("agent_reset_wrapper", False):
+        # this wrapper is used for learning resetting in continuing tasks. This wrapper should be used only when AdditionalActionWrapper is used.
         return GymEnvironment(
             AgentResetWrapper(
-                env=get_gym_env(env_config),
+                env=env,
                 reset_cost=env_config.get("reset_cost", None),
+            )
+        )
+    if env_config.get("episodic_to_continuing_wrapper", False):
+        # converting an episodic task to a continuing task. 
+        # An action that leads to a termination will immediately reset the environment and incur a cost.
+        return GymEnvironment(
+            EpisodicToContinuingWrapper(
+                env=env,
+                reset_cost=env_config.get("reset_cost", None),
+            )
+        )
+    
+    if env_config.get("episodic_task_add_cost_wrapper", False):
+        # adding a cost to the reward when the episode terminates. Only used for episodic tasks.
+        return GymEnvironment(
+            EpisodicTaskAddCostWrapper(
+                env=env,
             )
         )
 
     return GymEnvironment(
-        env_or_env_name=get_gym_env(env_config),
+        env_or_env_name=env,
     )
 
 
@@ -417,7 +445,8 @@ def eval_episodic(
             number_of_steps=eval_max_steps,
             render=render,
         )
-        frames.extend(info["frames"])
+        if render:
+            frames.extend(info["frames"])
         total_steps += episode_steps
         eps_return_list.append(info["return"])
         if "clipped_return" in info:
@@ -515,6 +544,8 @@ def run_episode(
                     report = agent.learn()
                 else:
                     report = {}
+        else:
+            report = {}
 
         # update stats
         cum_reward += original_reward
@@ -781,9 +812,7 @@ def train_continuing(
                 if "critic_loss" in learning_report_cache
                 else None
             )
-            message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, 
-            average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, 
-            average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+            message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
             last_cum_clipped_reward_print = cum_clipped_reward
             last_cum_reward_print = cum_reward
             last_cum_reset_print = cum_reset
@@ -1029,16 +1058,16 @@ if __name__ == "__main__":
         env.action_space._gym_space.seed(seed=run_id)
         env.reset(seed=run_id)
         envs.append(env)
+        if i == 1 or i == 2:
+            # make sure the three environments have the same size of state and action spaces
+            assert envs[0].observation_space.shape == envs[i].observation_space.shape
+            assert envs[0].action_space.shape == envs[i].action_space.shape
 
     # pyre-fixme
     train_env: GymEnvironment = envs[0]  # training environment
     eval_episodic_env: Optional[GymEnvironment] = envs[1]  # evaluated in episodic env
     eval_continuing_env: Optional[GymEnvironment] = envs[2]  # evaluated in continuing env
 
-    # make sure the three environments have the same size of state and action spaces
-    assert train_env.observation_space.shape == eval_episodic_env.observation_space.shape == eval_continuing_env.observation_space.shape
-    assert train_env.action_space.shape == eval_episodic_env.action_space.shape == eval_continuing_env.action_space.shape
-    
     param_sweeper_dict["action_space"] = env.action_space
     param_sweeper_dict["preprocessors"] = []
     if isinstance(env.action_space, DiscreteActionSpace):
@@ -1527,8 +1556,8 @@ if __name__ == "__main__":
         eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
         eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
 
-        if param_sweeper_dict["env"][0]["is_continuing"] or param_sweeper_dict.get(
-            "train_continuing", False
+        if param_sweeper_dict.get(
+            "train_env_is_continuing", False
         ):
             train_continuing(
                 train_agent, 

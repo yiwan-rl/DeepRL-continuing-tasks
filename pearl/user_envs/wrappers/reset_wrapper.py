@@ -16,49 +16,31 @@ import numpy as np
 from gymnasium import spaces
 
 
-class ResetWrapper(gym.Wrapper):
-    r"""A wrapper that deals with environment-specified resetting and random resetting.
+class EpisodicTaskAddCostWrapper(gym.Wrapper):
+    r"""A wrapper for episodic tasks. This wrapper adds a reset cost to the reward when the episode terminates.
+    If discount factor is one, adding this cost shifts all returns by the same amount, and thus will not change the order of policies.
     Args:
-        reset_prob: the probability of resetting the env at each step.
-        reset_cost: the cost of resetting the env.
-        is_continuing: If True, the env is used in a continuing task.
-            The env will be reset whenever a termination signal is received.
-            But the agent does not care about the reset signal.
-            Otherwise, the env is used in an episodic task.
-            The step function returns terminated=True and the env should be reset externally.
+        reset_cost: a number subtracted from the final reward.
     """
 
-    def __init__(self, env, reset_cost, random_reset_prob, is_continuing):
-        super(ResetWrapper, self).__init__(env)
+    def __init__(self, env, reset_cost):
+        super(EpisodicTaskAddCostWrapper, self).__init__(env)
         assert reset_cost is not None
-        assert random_reset_prob is not None
-        assert is_continuing is not None
         self.reset_cost = reset_cost
-        self.step_cnt = 0
-        self.is_continuing = is_continuing
-        self.random_reset_prob = random_reset_prob
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        self.step_cnt += 1
-        resetting = random.random() < self.random_reset_prob
-        if resetting or terminated:
-            terminated = True
-            info["reset"] = True
+        if terminated or truncated:
             reward -= self.reset_cost
-            if self.is_continuing:
-                obs, _ = self.env.reset(seed=self.step_cnt)
-                terminated = False
-        else:
-            info["reset"] = False
+            info["reset_cost"] = self.reset_cost
         return obs, reward, terminated, truncated, info
 
 
 class AgentResetWrapper(gym.Wrapper):
     r"""
-    This wrapper is used for learning resetting in continuing tasks without environment-specified resetting.
-    The agent has one more dim in the action space.
-    This additional action chooses whether to reset or not. A cost is incurred if the agent resets.
+    This wrapper is used for learning resetting in continuing tasks. This wrapper should be used only when AdditionalActionWrapper is used.
+    The agent controls the last dimension of the action space (continuous control) or chooses an action (discrete control) to choose whether to reset or not. 
+    A cost is incurred if the agent resets.
     Args:
         env: the environment
         reset_cost: the cost of resetting the environment
@@ -66,41 +48,108 @@ class AgentResetWrapper(gym.Wrapper):
 
     def __init__(self, env, reset_cost):
         super(AgentResetWrapper, self).__init__(env)
+        # check if AdditionalActionWrapper is used
+        assert isinstance(self.env, AdditionalActionWrapper)
         assert reset_cost is not None
         self.reset_cost = reset_cost
-        self.step_cnt = 0
-        if isinstance(self.action_space, spaces.Box):
-            self.augmented_low = self.action_space.low[-1]
-            self.augmented_high = self.action_space.high[-1]
-            tmp = self.action_space.low.tolist()
-            tmp.append(self.augmented_low)
-            low = np.array(tmp)
-            tmp = self.action_space.high.tolist()
-            tmp.append(self.augmented_high)
-            high = np.array(tmp)
-            self.augmented_action_space = spaces.Box(
-                low=low,
-                high=high,
-            )
-        else:
-            # self.augmented_action_space = spaces.Discrete(n=self.action_space.n + 1)
-            raise NotImplementedError("Only Box action space is supported.")
+        self.step_cnt = 0        
 
     def step(self, action):
-        obs, reward, terminated, truncated, info = self.env.step(action[:-1])
-        assert terminated is False
-        assert truncated is False
         self.step_cnt += 1
         if isinstance(self.action_space, spaces.Box):
-            resetting_prob = (action[-1] - self.augmented_low) / (
-                self.augmented_high - self.augmented_low
+            resetting_prob = (action[-1] - self.action_space.low[-1]) / (
+                self.action_space.high[-1] - self.action_space.low[-1]
             )
             resetting = random.random() < resetting_prob
-            info["reset"] = resetting
-            if resetting:
-                obs, _ = self.env.reset(seed=self.step_cnt)
-                reward -= self.reset_cost
         else:
-            raise NotImplementedError("Only Box action space is supported.")
+            resetting = action == self.action_space.n - 1 # last action is reset
+        if resetting:
+            obs, _ = self.env.reset(seed=self.step_cnt)
+            reward = -self.reset_cost
+            info = {
+                "reset_cost": self.reset_cost,
+            }
+            return obs, reward, False, False, info
+        else:
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            # environment should not decide to reset
+            assert terminated is False
+            assert truncated is False
+            return obs, reward, terminated, truncated, info
+    
 
+class EpisodicToContinuingWrapper(gym.Wrapper):
+    r"""
+    This wrapper is used for converting an episodic task to a continuing task. 
+    A cost is incurred when the environment resets.
+    Args:
+        env: the environment
+        reset_cost: the cost of resetting the environment
+    """
+
+    def __init__(self, env, reset_cost):
+        super(EpisodicToContinuingWrapper, self).__init__(env)
+        assert reset_cost is not None
+        self.reset_cost = reset_cost
+        self.step_cnt = 0        
+
+    def step(self, action):
+        self.step_cnt += 1
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if terminated or truncated:
+            # environment decides to reset
+            obs, _ = self.env.reset(seed=self.step_cnt)
+            reward = -self.reset_cost
+            info = {
+                "reset_cost": self.reset_cost,
+            }
+
+        return obs, reward, False, False, info
+
+
+class AdditionalActionWrapper(gym.Wrapper):
+    r"""
+    This wrapper is used to add an additional action dimension/action.
+    This additional action dim/action can be used to control resetting.
+    Args:
+        env: the environment
+    """
+
+    def __init__(self, env):
+        super(AdditionalActionWrapper, self).__init__(env)
+        self.step_cnt = 0
+        if isinstance(self.action_space, spaces.Box):
+            # Add a dimension
+            self.augmented_low = self.action_space.low[-1]
+            self.augmented_high = self.action_space.high[-1]
+            low = np.append(self.action_space.low, self.augmented_low)
+            high = np.append(self.action_space.high, self.augmented_high)
+            self.action_space = spaces.Box(low=low, high=high)
+        else:
+            self.action_space = spaces.Discrete(n=self.action_space.n + 1)
+
+    def step(self, action):
+        if isinstance(self.action_space, spaces.Box):
+            obs, reward, terminated, truncated, info = self.env.step(action[:-1])
+        else:
+            obs, reward, terminated, truncated, info = self.env.step(action % (self.action_space.n - 1)) # if last action was chosen, choose the first action.
+        return obs, reward, terminated, truncated, info
+
+
+class RandomResetWrapper(gym.Wrapper):
+    r"""
+    This wrapper is used to create an environment that randomly resets with a probability of reset_prob.
+    Args:
+        env: the environment
+        reset_prob: the probability of resetting the environment
+    """
+
+    def __init__(self, env, reset_prob):
+        super(RandomResetWrapper, self).__init__(env)
+        self.reset_prob = reset_prob
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if random.random() < self.reset_prob:
+            terminated = True
         return obs, reward, terminated, truncated, info

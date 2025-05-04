@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+
 from abc import ABC, abstractmethod
 from typing import Tuple
 
@@ -96,5 +97,12 @@ class RewardClipping(Preprocessor):
         :param reward:
         :return:
         """
-        # clip rewards to {+1, 0, -1}
-        action_result.reward = np.sign(action_result.reward).item()
+        # do not clip reset cost.
+        if "reset_cost" in action_result.info:
+            reset_cost = action_result.info["reset_cost"]
+            original_reward = action_result.reward + reset_cost
+            clipped_reward = np.sign(original_reward).item()
+            action_result.reward = clipped_reward - reset_cost
+        else:
+            # clip rewards to {+1, 0, -1}
+            action_result.reward = np.sign(action_result.reward).item()
