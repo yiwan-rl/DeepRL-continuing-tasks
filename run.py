@@ -1002,6 +1002,7 @@ def q_init_network(param_sweeper_dict: Dict[str, Any]) -> None:
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="run_file")
     parser.add_argument("--gpu-id", default=-1)
     parser.add_argument("--base-id", default=0)
@@ -1021,7 +1022,7 @@ if __name__ == "__main__":
     run_id: int = int(args.base_id)
     param_sweeper_dict: Dict[str, Any] = param_sweeper.parse(run_id)
     param_sweeper_dict["id"] = run_id
-    param_sweeper_dict["device_id"] = args.gpu_id
+    param_sweeper_dict["device_id"] = int(args.gpu_id)
     param_sweeper_dict["output_dir"] = args.out_dir
 
     """
@@ -1577,9 +1578,10 @@ if __name__ == "__main__":
             assert (
                 "model_folder" in param_sweeper_dict
             ), "model_folder not found in param_sweeper_dict"
-            if not os.path.exists(param_sweeper_dict["model_folder"]):
-                os.makedirs(param_sweeper_dict["model_folder"])
-            model_path = args.out_dir + param_sweeper_dict["model_folder"] + str(run_id)
+            model_folder = args.out_dir + param_sweeper_dict["model_folder"]
+            if not os.path.exists(model_folder):
+                os.makedirs(model_folder)
+            model_path = model_folder + str(run_id)
             print(f"Saving model to {model_path}")
             train_agent.policy_learner.save_model(path=model_path)
 
@@ -1590,3 +1592,5 @@ if __name__ == "__main__":
                         "wb",
                     ) as file:
                         pickle.dump(p, file)
+    end_time = time.time()
+    print(f"Time taken: {(end_time - start_time) / 60} minutes")

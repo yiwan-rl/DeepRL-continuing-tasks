@@ -23,7 +23,7 @@ done | parallel --jobs "$NUM_CPUS" \
     "echo 'Starting job {}' >&2 && 
      python3 run.py --config-file $CONFIG \
                     --out-dir $OUT_DIR \
-                    --base-id {} > $OUT_DIR/{}.log 2>&1 && 
+                    --base-id {} --gpu-id -2 > $OUT_DIR/{}.log 2>&1 && 
      echo 'Completed job {}' >&2"
 
 echo "All jobs completed!" 

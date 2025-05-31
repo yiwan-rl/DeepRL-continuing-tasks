@@ -75,7 +75,7 @@ export TOKEN_FILE LOCK_FILE CONFIG OUT_DIR
 jobs=()
 for run_id in {0..4}; do
     for i in {0..39}; do
-        jobs+=("$i")
+        jobs+=("$((run_id * 40 + i))")
     done
 done
 

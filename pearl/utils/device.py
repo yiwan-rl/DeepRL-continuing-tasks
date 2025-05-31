@@ -11,6 +11,8 @@ import torch
 import torch.distributed as dist
 
 def get_pearl_device(device_id: int = -1) -> torch.device:
+    if device_id == -2:
+        return torch.device("cpu")
     if device_id != -1:
         return torch.device("cuda:" + str(device_id))
 
