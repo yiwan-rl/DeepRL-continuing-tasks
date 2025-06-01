@@ -136,17 +136,14 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
     attach a versatility wrapper to the environment
     """
     env_config = env_config[0]
+    env=get_gym_env(env_config)
 
     if env_config.get("random_reset_wrapper", False):
         # create an evironment that randomly resets with a probability of reset_prob
-        return GymEnvironment(
-            RandomResetWrapper(
-                env=get_gym_env(env_config),
-                reset_prob=env_config.get("reset_prob", None),
-            )
+        env = RandomResetWrapper(
+            env=env,
+            reset_prob=env_config.get("reset_prob", None),
         )
-    else:
-        env = get_gym_env(env_config)
 
     if env_config.get("additional_action_wrapper", False):
         # this additional action dimension/action can be used to control resetting
@@ -156,33 +153,25 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
 
     if env_config.get("agent_reset_wrapper", False):
         # this wrapper is used for learning resetting in continuing tasks. This wrapper should be used only when AdditionalActionWrapper is used.
-        return GymEnvironment(
-            AgentResetWrapper(
-                env=env,
-                reset_cost=env_config.get("reset_cost", None),
-            )
+        env = AgentResetWrapper(
+            env=env,
+            reset_cost=env_config.get("reset_cost", None),
         )
     if env_config.get("episodic_to_continuing_wrapper", False):
         # converting an episodic task to a continuing task. 
         # An action that leads to a termination will immediately reset the environment and incur a cost.
-        return GymEnvironment(
-            EpisodicToContinuingWrapper(
-                env=env,
-                reset_cost=env_config.get("reset_cost", None),
-            )
+        env = EpisodicToContinuingWrapper(
+            env=env,
+            reset_cost=env_config.get("reset_cost", None),
         )
     
     if env_config.get("episodic_task_add_cost_wrapper", False):
         # adding a cost to the reward when the episode terminates. Only used for episodic tasks.
-        return GymEnvironment(
-            EpisodicTaskAddCostWrapper(
-                env=env,
-            )
+        env = EpisodicTaskAddCostWrapper(
+            env=env,
         )
 
-    return GymEnvironment(
-        env_or_env_name=env,
-    )
+    return GymEnvironment(env)
 
 
 def env_supports_termination_when_unhealthy(env_name: str) -> bool:
@@ -1042,7 +1031,7 @@ if __name__ == "__main__":
     Initialize the environment
     """
 
-    envs_configs = ["env", "eval_env_episodic", "eval_env_continuing"]
+    envs_configs = ["env", "eval_episodic_env", "eval_continuing_env"]
     for i in range(3):
         # envs[0]: training agent and env
         # envs[1]: evaluated in episodic env
