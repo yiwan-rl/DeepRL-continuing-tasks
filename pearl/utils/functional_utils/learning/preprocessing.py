@@ -76,21 +76,20 @@ class ObservationNormalization(Preprocessor):
         self._shape = shape
         self._test_time = False
 
-    def process(self, action_result: ActionResult) -> None:
+    def process(self, obs, reward, terminated, truncated, info) -> None:
         # preprocess observations by applying normalization
         # see https://arxiv.org/pdf/2006.05990.pdf
-        obs = action_result.observation
         assert type(obs) is np.ndarray
         assert len(obs.shape) == 1
         if self._test_time is False:
             self._obs_rms.update(obs.reshape(1, -1))
         normalized_obs = (obs - self._obs_rms.mean) / np.sqrt(self._obs_rms.var + 1e-8)
-        action_result.observation = normalized_obs
+        return normalized_obs, reward, terminated, truncated, info
 
 
 class RewardClipping(Preprocessor):
 
-    def process(self, action_result: ActionResult) -> None:
+    def process(self, obs, reward, terminated, truncated, info) -> None:
         """
         Bin reward to {+1, 0, -1} by its sign.
 
@@ -98,11 +97,12 @@ class RewardClipping(Preprocessor):
         :return:
         """
         # do not clip reset cost.
-        if "reset_cost" in action_result.info:
-            reset_cost = action_result.info["reset_cost"]
-            original_reward = action_result.reward + reset_cost
+        if "reset_cost" in info:
+            reset_cost = info["reset_cost"]
+            original_reward = reward + reset_cost
             clipped_reward = np.sign(original_reward).item()
-            action_result.reward = clipped_reward - reset_cost
+            reward = clipped_reward - reset_cost
         else:
             # clip rewards to {+1, 0, -1}
-            action_result.reward = np.sign(action_result.reward).item()
+            reward = np.sign(reward).item()
+        return obs, reward, terminated, truncated, info

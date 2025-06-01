@@ -8,7 +8,7 @@
 # pyre-strict
 
 import logging
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 from pearl.api.action import Action
@@ -62,19 +62,13 @@ class GymEnvironment(Environment):
     """A wrapper for `gym.Env` to behave like Pearl's `Environment`."""
 
     def __init__(
-        self, env_or_env_name: Union[gym.Env, str], *args: Any, **kwargs: Any
+        self, env: gym.Env
     ) -> None:
         """Constructs a `GymEnvironment` wrapper.
 
         Args:
-            env_or_env_name: A gym.Env instance or a name of a gym.Env.
-            args: Arguments passed to `gym.make()` if the first argument is a string.
-            kwargs: Keyword arguments passed to `gym.make()` if the first argument is a string.
+            env: A gym.Env instance
         """
-        if type(env_or_env_name) is str:
-            env = gym.make(env_or_env_name, *args, **kwargs)
-        else:
-            env = env_or_env_name
         self.env: gym.Env = env
         self._action_space: ActionSpace = _get_pearl_space(
             gym_space=self.env.action_space,
@@ -94,25 +88,13 @@ class GymEnvironment(Environment):
     def observation_space(self) -> Space:
         return self._observation_space
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[Observation, ActionSpace]:
+    def reset(self, seed: Optional[int] = None) -> Observation:
         """Resets the environment and returns the initial observation and
         initial action space."""
-        # pyre-fixme: ActionSpace does not have _gym_space
-        # FIXME: private attribute _gym_space should not be accessed
-        # self._action_space._gym_space.seed(seed)
-        # self.env.action_space.seed(seed)
         observation, info = self.env.reset(seed=seed)
-        # reset_result = self.env.reset()
-        # if isinstance(reset_result, Iterable) and isinstance(reset_result[1], dict):
-        #     # newer Gym versions return an info dict.
-        #     observation, info = self.env.reset(seed=seed)
-        # else:
-        #     # TODO: Deprecate this part at some point and only support new
-        #     # version of Gymnasium?
-        #     observation = list(reset_result.values())[0]  # pyre-ignore
         if observation.dtype == np.float64:
             observation = observation.astype(np.float32)
-        return observation, self.action_space
+        return observation, info
 
     def step(self, action: Action) -> ActionResult:
         """Takes one step in the environment given the agent's action. Returns an
@@ -123,49 +105,14 @@ class GymEnvironment(Environment):
             gym_space=self.env.action_space,
         )
         # Take a step in the environment and receive an action result
-        gym_action_result = self.env.step(effective_action)
-        if len(gym_action_result) == 4:
-            # Older Gym versions use 'done' as opposed to 'terminated' and 'truncated'
-            observation, reward, done, info = gym_action_result  # pyre-ignore
-            if done:
-                truncated = info["TimeLimit.truncated"]
-                terminated = not truncated
-            else:
-                truncated = False
-                terminated = False
-        elif len(gym_action_result) == 5:
-            # Newer Gym versions use 'terminated' and 'truncated'
-            observation, reward, terminated, truncated, info = gym_action_result
-        else:
-            raise ValueError(
-                f"Unexpected action result from Gym (expected 4 or 5 elements): {gym_action_result}"
-            )
-        if "cost" in info.keys():
-            cost = info["cost"]
-        else:
-            cost = None
-
-        if "available_action_space" in info.keys():
-            available_action_space = info["available_action_space"]
-        else:
-            available_action_space = None
+        observation, reward, terminated, truncated, info = self.env.step(effective_action)
 
         if observation.dtype == np.float64:
             observation = observation.astype(np.float32)
         if isinstance(reward, np.float64):
             reward = reward.astype(np.float32)
-        if isinstance(cost, np.float64):
-            cost = cost.astype(np.float32)
 
-        return ActionResult(
-            observation=observation,
-            reward=reward,
-            terminated=terminated,
-            truncated=truncated,
-            info=info,
-            cost=cost,
-            available_action_space=available_action_space,
-        )
+        return observation, reward, terminated, truncated, info
 
     def render(self) -> None:
         self.env.render()

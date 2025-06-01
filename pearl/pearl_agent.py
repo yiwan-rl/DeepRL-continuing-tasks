@@ -66,7 +66,6 @@ class PearlAgent(Agent):
 
         self._latest_observation: Optional[Observation] = None
         self._latest_action: Optional[Action] = None
-        self._action_space: Optional[ActionSpace] = None
         self.policy_learner.to(self.device)
         if self.policy_learner.reward_rate.device != self.device:
             self.policy_learner.reward_rate = self.policy_learner.reward_rate.to(
@@ -74,9 +73,8 @@ class PearlAgent(Agent):
             )
 
     def act(self, exploit: bool = False) -> Action:
-        assert self._action_space is not None
         action = self.policy_learner.act(
-            torch.as_tensor(np.array(self._latest_observation)).to(self.device), self._action_space, exploit=exploit  # pyre-fixme[6]
+            torch.as_tensor(np.array(self._latest_observation)).to(self.device), exploit=exploit  # pyre-fixme[6]
         )
 
         self._latest_action = action
@@ -93,14 +91,14 @@ class PearlAgent(Agent):
 
     def observe(
         self,
-        action_result: ActionResult,
+        obs, reward, terminated, truncated, info,
     ) -> None:
         assert self._latest_action is not None
         if isinstance(self.policy_learner.reward_centering, MA_RC):
             ma_rate = self.policy_learner.reward_centering.ma_rate
             self.policy_learner.reward_rate = (
                 self.policy_learner.reward_rate * ma_rate
-                + action_result.reward * (1 - ma_rate)
+                + reward * (1 - ma_rate)
             )
 
         assert self._latest_observation is not None
@@ -108,18 +106,13 @@ class PearlAgent(Agent):
         self.replay_buffer.push(
             obs=self._latest_observation,
             action=self._latest_action.cpu().numpy(),
-            reward=action_result.reward,
-            next_obs=action_result.observation,
-            terminated=action_result.terminated,
-            truncated=action_result.truncated,
+            reward=reward,
+            next_obs=obs,
+            terminated=terminated,
+            truncated=truncated,
         )
 
-        self._action_space = (
-            action_result.available_action_space
-            if action_result.available_action_space is not None
-            else self._action_space
-        )
-        self._latest_observation = action_result.observation
+        self._latest_observation = obs
 
     def learn(self) -> Dict[str, Any]:
         report = self.policy_learner.learn(self.replay_buffer)
@@ -140,12 +133,10 @@ class PearlAgent(Agent):
         return policy_learner_loss
 
     def reset(
-        self, observation: Observation, available_action_space: ActionSpace
+        self, observation: Observation
     ) -> None:
         self._latest_action = None
         self._latest_observation = observation
-        self._action_space = available_action_space
-        self.policy_learner.reset(available_action_space)
 
     def __str__(self) -> str:
         items = []

@@ -28,11 +28,6 @@ import torch.nn as nn
 
 # pyre-fixme
 from alphaex.sweeper import Sweeper
-from pearl import action_representation_modules
-from pearl.action_representation_modules import IdentityActionRepresentationModule
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.observation import Observation
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.neural_networks.common import value_networks
@@ -352,11 +347,11 @@ def eval_continuing(
     # evaluate the agent in the continuing version of the environment
     # pyre-fixme
     assert eval_continuing_env is not None
-    observation, action_space = eval_continuing_env.reset()
+    observation, _ = eval_continuing_env.reset()
     if qpos is not None and qvel is not None:
         # for mujoco env, if qpos and qvel are not None, we set the state of the environment
         eval_continuing_env.env.set_state(qpos, qvel)
-    eval_continuing_agent.reset(observation, action_space)
+    eval_continuing_agent.reset(observation)
     eval_cum_reward, eval_cum_reset, eval_cum_clipped_reward = 0, 0, 0
     frames = []
     for _ in range(1, eval_max_steps + 1):
@@ -367,18 +362,18 @@ def eval_continuing(
 
         # the environment receives the action and returns the result
         # pyre-fixme
-        action_result = eval_continuing_env.step(action)
+        observation, reward, terminated, truncated, info = eval_continuing_env.step(action)
 
         # update stats
-        eval_cum_reward += action_result.reward
-        eval_cum_reset += int(action_result.info.get("reset", False))
+        eval_cum_reward += reward
+        eval_cum_reset += int(info.get("reset", False))
 
         for preprocessor in preprocessors:
-            preprocessor.process(action_result)
-        eval_cum_clipped_reward += action_result.reward
+            observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
+        eval_cum_clipped_reward += reward
 
         # the agent receives the action result
-        eval_continuing_agent.observe(action_result)
+        eval_continuing_agent.observe(observation, reward, terminated, truncated, info)
     avg_reward = eval_cum_reward / eval_max_steps
     avg_reset = eval_cum_reset / eval_max_steps
     avg_clipped_reward = eval_cum_clipped_reward / eval_max_steps
@@ -489,8 +484,8 @@ def run_episode(
     Returns:
         Tuple[Dict[str, Any], int]: the return of the episode and the number of steps taken.
     """
-    observation, action_space = env.reset()
-    agent.reset(observation, action_space)
+    observation, _ = env.reset()
+    agent.reset(observation)
     cum_reward = 0
     cum_clipped_reward = 0
 
@@ -505,16 +500,16 @@ def run_episode(
         action = agent.act(exploit=exploit)
 
         # the environment receives the action and returns the result
-        action_result = env.step(action)
-        original_reward = action_result.reward
+        observation, reward, terminated, truncated, info = env.step(action)
+        original_reward = reward
         for preprocessor in preprocessors:
-            preprocessor.process(action_result)
-        clipped_reward = action_result.reward
+            observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
+        clipped_reward = reward
 
         # the agent observes the result
-        agent.observe(action_result)
+        agent.observe(observation, reward, terminated, truncated, info)
 
-        done = action_result.truncated or action_result.terminated
+        done = truncated or terminated
         episode_steps += 1
         
         # learn
@@ -543,7 +538,7 @@ def run_episode(
         for key in report:
             learning_report_cache.setdefault(key, []).append(report[key])
         if record_visited_observations and (total_steps + episode_steps) % observation_record_period == 0:
-            visited_observations.append(action_result.observation)
+            visited_observations.append(observation)
 
         if (
             number_of_steps is not None
@@ -553,12 +548,12 @@ def run_episode(
 
     info["return"] = cum_reward
     info["clipped_return"] = cum_clipped_reward
-    if "episode" in action_result.info:
+    if "episode" in info:
         # in Atari games, we terminate the episode when the agent loses a life
         # Each game has multiple lives. Sometimes we care about the total return accumulated over all lives.
         # This is saved in info["full_return"]. 
-        logger.info(action_result.info["episode"]["r"])
-        info["full_return"] = action_result.info["episode"]["r"]
+        logger.info(info["episode"]["r"])
+        info["full_return"] = info["episode"]["r"]
     if render:
         info["frames"] = frames
     return info, episode_steps
@@ -749,8 +744,8 @@ def train_continuing(
 
     # initialize the environment and the agent
     assert train_env is not None
-    observation, action_space = train_env.reset()
-    train_agent.reset(observation, action_space)
+    observation, _ = train_env.reset()
+    train_agent.reset(observation)
 
     start_time = time.time()
 
@@ -760,17 +755,17 @@ def train_continuing(
         action = train_agent.act(exploit=False)
 
         # environment receives the action and returns the result
-        action_result = train_env.step(action)
-        original_reward = action_result.reward
+        observation, reward, terminated, truncated, info = train_env.step(action)
+        original_reward = reward
         for preprocessor in preprocessors:
-            preprocessor.process(action_result)
-        clipped_reward = action_result.reward
-        num_resets = action_result.info.get("num_resets", 0)
+            observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
+        clipped_reward = reward
+        num_resets = info.get("num_resets", 0)
 
         steps += 1
 
         # agent observes the new result of the action
-        train_agent.observe(action_result)
+        train_agent.observe(observation, reward, terminated, truncated, info)
 
         # agent learns
         if (
@@ -1059,14 +1054,6 @@ if __name__ == "__main__":
 
     param_sweeper_dict["action_space"] = env.action_space
     param_sweeper_dict["preprocessors"] = []
-    if isinstance(env.action_space, DiscreteActionSpace):
-        max_number_actions: int = env.action_space.n
-        action_dim: int = env.action_space.action_dim
-    elif isinstance(env.action_space, BoxActionSpace):
-        max_number_actions = -1
-        action_dim = env.action_space.action_dim
-    else:
-        raise NotImplementedError
 
     """
     Initialize preprocessors
@@ -1084,47 +1071,6 @@ if __name__ == "__main__":
             # pyre-fixme
             ObservationNormalization(train_env.observation_space.shape)
         )
-
-    """
-    Initialize action representation module
-    """
-
-    if "action_representation_module:type" in param_sweeper_dict:
-        # if action representation module name is specified, initialize a module
-        if param_sweeper_dict["action_representation_module:type"] in [
-            "OneHotActionTensorRepresentationModule",
-        ]:
-            param_sweeper_dict["action_representation_module:max_number_actions"] = (
-                max_number_actions
-            )
-        elif param_sweeper_dict["action_representation_module:type"] in [
-            "IdentityActionRepresentationModule"
-        ]:
-            param_sweeper_dict["action_representation_module:representation_dim"] = (
-                action_dim
-            )
-        else:
-            raise NotImplementedError
-        action_representation_module_class: Type[ActionRepresentationModule] = getattr(
-            action_representation_modules,
-            param_sweeper_dict["action_representation_module:type"],
-        )
-        init_class(
-            action_representation_module_class,
-            "action_representation_module",
-            param_sweeper_dict,
-        )
-    else:
-        param_sweeper_dict["action_representation_module"] = (
-            IdentityActionRepresentationModule(
-                max_number_actions=max_number_actions,
-                representation_dim=action_dim,
-            )
-        )
-
-    action_representation_dim: int = param_sweeper_dict[
-        "action_representation_module"
-    ].representation_dim
 
     """
     Initialize exploration module
@@ -1226,7 +1172,7 @@ if __name__ == "__main__":
             )
         else:
             raise NotImplementedError
-        param_sweeper_dict["network_instance:action_dim"] = action_representation_dim
+        param_sweeper_dict["network_instance:action_dim"] = env.action_space.action_dim
         network_class: Type[QValueNetwork] = getattr(
             q_value_networks, param_sweeper_dict["network_instance:type"]
         )
@@ -1254,9 +1200,7 @@ if __name__ == "__main__":
         else:
             raise NotImplementedError
         param_sweeper_dict["actor_network_instance:output_dim"] = (
-            action_representation_dim
-            if max_number_actions == -1  # continuous actions
-            else max_number_actions  # discrete actions
+            env.action_space.action_dim
         )
         param_sweeper_dict["actor_network_instance:action_space"] = env.action_space
         actor_class: Type[ActorNetwork] = getattr(
@@ -1315,7 +1259,7 @@ if __name__ == "__main__":
                 else:
                     raise NotImplementedError
                 param_sweeper_dict["critic_member_network:action_dim"] = (
-                    action_representation_dim
+                    env.action_space.action_dim
                 )
                 member_network_class = getattr(
                     q_value_networks,

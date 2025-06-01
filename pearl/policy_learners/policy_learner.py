@@ -11,9 +11,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
@@ -45,7 +42,7 @@ class PolicyLearner(torch.nn.Module, ABC):
 
     def __init__(
         self,
-        action_representation_module: ActionRepresentationModule,
+        action_space: ActionSpace,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
         training_rounds: int = 100,
@@ -55,11 +52,8 @@ class PolicyLearner(torch.nn.Module, ABC):
         **options: Any,
     ) -> None:
         super(PolicyLearner, self).__init__()
-
+        self._action_space: ActionSpace = action_space
         self._exploration_module: ExplorationModule = exploration_module
-        assert action_representation_module.representation_dim != -1
-        self._action_representation_module = action_representation_module
-
         self._training_rounds = training_rounds
         self._batch_size = batch_size
         self._training_steps = 0
@@ -75,18 +69,11 @@ class PolicyLearner(torch.nn.Module, ABC):
     def exploration_module(self) -> ExplorationModule:
         return self._exploration_module
 
-    @property
-    def action_representation_module(self) -> ActionRepresentationModule:
-        return self._action_representation_module
-
     @exploration_module.setter
     def exploration_module(self, new_exploration_module: ExplorationModule) -> None:
         self._exploration_module = new_exploration_module
 
-    def get_action_representation_module(self) -> ActionRepresentationModule:
-        return self._action_representation_module
-
-    def reset(self, action_space: ActionSpace) -> None:
+    def reset(self) -> None:
         """Resets policy maker for a new episode. Default implementation does nothing."""
         pass
 
@@ -94,7 +81,6 @@ class PolicyLearner(torch.nn.Module, ABC):
     def act(
         self,
         subjective_state: SubjectiveState,
-        available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
         pass
@@ -121,11 +107,9 @@ class PolicyLearner(torch.nn.Module, ABC):
             freq = self.reward_centering.ref_states_update_freq
             if self._training_steps % freq == 0:
                 assert isinstance(replay_buffer, TensorBasedReplayBuffer)
-                batch = replay_buffer.create_f_batch(
+                self.reward_centering.f_batch = replay_buffer.create_f_batch(
                     batch_size=self._batch_size, last_k_steps=freq
                 )
-                # pyre-fixme
-                self.reward_centering.f_batch = self.preprocess_batch(batch)
             # pyre-fixme
             self.reward_rate = self.compute_f_value(self.reward_centering.f_batch)
         report = {}
@@ -134,7 +118,6 @@ class PolicyLearner(torch.nn.Module, ABC):
             batch = replay_buffer.sample(batch_size)
             single_report = {}
             if isinstance(batch, TransitionBatch):
-                batch = self.preprocess_batch(batch)
                 single_report = self.learn_batch(batch)
 
             for k, v in single_report.items():
@@ -143,16 +126,6 @@ class PolicyLearner(torch.nn.Module, ABC):
                 else:
                     report[k] = [v]
         return report
-
-    def preprocess_batch(self, batch: TransitionBatch) -> TransitionBatch:
-        """
-        Processes a batch of transitions before passing it to learn_batch().
-        This function can be used to implement preprocessing steps such as
-        transform the actions.
-        """
-
-        batch.action = self._action_representation_module(batch.action)
-        return batch
 
     @abstractmethod
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:

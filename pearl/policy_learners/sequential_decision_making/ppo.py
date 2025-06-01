@@ -11,19 +11,10 @@ import math
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.neural_networks.common.value_networks import ValueNetwork
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     action_scaling,
     ActorNetwork,
-)
-from pearl.policy_learners.exploration_modules.common.no_exploration import (
-    NoExploration,
-)
-from pearl.policy_learners.exploration_modules.common.propensity_exploration import (
-    PropensityExploration,
 )
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -40,6 +31,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.preprocessing import RunningMeanStd
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
+from pearl.api.action_space import ActionSpace
 
 
 class ProximalPolicyOptimization(ActorCriticBase):
@@ -50,11 +42,11 @@ class ProximalPolicyOptimization(ActorCriticBase):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[ValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
         discount_factor: float = 0.99,
@@ -74,12 +66,8 @@ class ProximalPolicyOptimization(ActorCriticBase):
         reward_rate: torch.Tensor = torch.tensor(0.0),
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
-        if exploration_module is None:
-            if is_action_continuous:
-                exploration_module = NoExploration()
-            else:
-                exploration_module = PropensityExploration()
         super(ProximalPolicyOptimization, self).__init__(
+            action_space=action_space,
             use_actor_target=False,
             use_critic_target=False,
             actor_soft_update_tau=0.0,  # not used
@@ -90,7 +78,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=is_action_continuous,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,

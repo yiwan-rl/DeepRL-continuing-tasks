@@ -10,9 +10,6 @@
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.action_space import ActionSpace
 from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
@@ -31,7 +28,7 @@ from pearl.utils.functional_utils.learning.critic_utils import (
 )
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
-
+from pearl.api.action_space import ActionSpace
 
 # Currently available actions is not used. Needs to be updated once we know the input
 # structure of production stack on this param.
@@ -45,11 +42,11 @@ class SoftActorCritic(ActorCriticBase):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         critic_soft_update_tau: float = 1,
         critic_target_update_freq: int = 8000,
@@ -64,6 +61,7 @@ class SoftActorCritic(ActorCriticBase):
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(SoftActorCritic, self).__init__(
+            action_space=action_space,
             use_actor_target=False,
             use_critic_target=True,
             actor_soft_update_tau=0.0,  # not used
@@ -76,7 +74,6 @@ class SoftActorCritic(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=False,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,
@@ -107,7 +104,7 @@ class SoftActorCritic(ActorCriticBase):
                 "_target_entropy",
                 -target_entropy_scale
                 * torch.log(
-                    torch.tensor(1.0 / action_representation_module.max_number_actions)
+                    torch.tensor(1.0 / self._action_space.num_actions)
                 ),
             )
         else:
