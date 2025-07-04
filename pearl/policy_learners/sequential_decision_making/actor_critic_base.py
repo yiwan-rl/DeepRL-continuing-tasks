@@ -52,6 +52,7 @@ class ActorCriticBase(PolicyLearner):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[ValueNetwork, QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
@@ -73,6 +74,7 @@ class ActorCriticBase(PolicyLearner):
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(ActorCriticBase, self).__init__(
+            action_space=action_space,
             is_action_continuous=is_action_continuous,
             training_rounds=training_rounds,
             batch_size=batch_size,
@@ -113,7 +115,6 @@ class ActorCriticBase(PolicyLearner):
     def act(
         self,
         subjective_state: SubjectiveState,
-        available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
         """
@@ -147,13 +148,13 @@ class ActorCriticBase(PolicyLearner):
                 exploit_action = self._actor.sample_action(subjective_state)
                 action_probabilities = None
             else:
-                assert isinstance(available_action_space, DiscreteActionSpace)
+                assert isinstance(self._action_space, DiscreteActionSpace)
                 action_probabilities = self._actor.get_policy_distribution(
                     state_batch=subjective_state,
                 )
                 # (action_space_size)
                 exploit_action_index = torch.argmax(action_probabilities)
-                exploit_action = available_action_space.actions[exploit_action_index]
+                exploit_action = self._action_space.actions[exploit_action_index]
 
         # Step 2: return exploit action if no exploration,
         # else pass through the exploration module
@@ -163,13 +164,11 @@ class ActorCriticBase(PolicyLearner):
         # TODO: carefully check if safe action space is integrated with the exploration module
         return self._exploration_module.act(
             exploit_action=exploit_action,
-            action_space=available_action_space,
+            action_space=self._action_space,
             subjective_state=subjective_state,
             values=action_probabilities,
         )
 
-    def reset(self, action_space: ActionSpace) -> None:
-        self._action_space = action_space
 
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:
         """

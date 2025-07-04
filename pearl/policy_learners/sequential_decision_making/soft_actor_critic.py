@@ -45,6 +45,7 @@ class SoftActorCritic(ActorCriticBase):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
@@ -64,6 +65,7 @@ class SoftActorCritic(ActorCriticBase):
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(SoftActorCritic, self).__init__(
+            action_space=action_space,
             use_actor_target=False,
             use_critic_target=True,
             actor_soft_update_tau=0.0,  # not used

@@ -44,6 +44,7 @@ class DeepTDLearning(PolicyLearner):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         network_instance: QValueNetwork,
         optimizer: optim.Optimizer,
         action_representation_module: ActionRepresentationModule,
@@ -98,6 +99,7 @@ class DeepTDLearning(PolicyLearner):
                 Defaults to None.
         """
         super(DeepTDLearning, self).__init__(
+            action_space=action_space,
             training_rounds=training_rounds,
             batch_size=batch_size,
             exploration_module=exploration_module,
@@ -119,13 +121,9 @@ class DeepTDLearning(PolicyLearner):
     def optimizer(self) -> torch.optim.Optimizer:
         return self._optimizer
 
-    def reset(self, action_space: ActionSpace) -> None:
-        self._action_space = action_space
-
     def act(
         self,
         subjective_state: SubjectiveState,
-        available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
         """
@@ -147,11 +145,11 @@ class DeepTDLearning(PolicyLearner):
         """
         # TODO: Assumes gym action space.
         # Fix the available action space.
-        assert isinstance(available_action_space, DiscreteActionSpace)
+        assert isinstance(self._action_space, DiscreteActionSpace)
         with torch.no_grad():
             batched_subjective_state = subjective_state.unsqueeze(0)  # (1 x state_dim)
             batched_actions_representation = self._action_representation_module(
-                available_action_space.actions_batch.to(batched_subjective_state)
+                self._action_space.actions_batch.to(batched_subjective_state)
             ).unsqueeze(
                 0
             )  # (1 x number of actions x action_dim)
@@ -162,9 +160,7 @@ class DeepTDLearning(PolicyLearner):
             )  # (1 x number of actions)
             # this does a forward pass since all avaialble
             # actions are already stacked together
-            q_values = q_values.squeeze(0)  # (number of actions)
-            exploit_action_index = torch.argmax(q_values)
-            exploit_action = available_action_space.actions[exploit_action_index]
+            exploit_action = self._action_space.actions[exploit_action_index]
 
         if exploit:
             return exploit_action
@@ -172,7 +168,7 @@ class DeepTDLearning(PolicyLearner):
         assert self._exploration_module is not None
         return self._exploration_module.act(
             subjective_state=subjective_state,
-            action_space=available_action_space,
+            action_space=self._action_space,
             exploit_action=exploit_action,
             values=q_values,
         )

@@ -57,16 +57,17 @@ class TransitionBatch:
     state: torch.Tensor
     action: torch.Tensor
     reward: torch.Tensor
-    terminated: torch.Tensor = torch.tensor(True)  # default True is useful for bandits
-    truncated: torch.Tensor = torch.tensor(True)  # default True is useful for bandits
+    terminated: torch.Tensor
+    truncated: torch.Tensor
     next_state: Optional[torch.Tensor] = None
 
     def to(self: TB, device: torch.device) -> TB:
         # iterate over all fields
         for f in dataclasses.fields(self.__class__):
-            if getattr(self, f.name) is not None:
-                item = getattr(self, f.name)
-                item = torch.as_tensor(item, device=device)
+            item = getattr(self, f.name)
+            if item is not None:
+                item = item.pin_memory()
+                item = item.to(device, non_blocking=True)
                 super().__setattr__(
                     f.name,
                     item,

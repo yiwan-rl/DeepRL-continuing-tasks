@@ -45,6 +45,7 @@ class PolicyLearner(torch.nn.Module, ABC):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
@@ -55,7 +56,7 @@ class PolicyLearner(torch.nn.Module, ABC):
         **options: Any,
     ) -> None:
         super(PolicyLearner, self).__init__()
-
+        self._action_space: ActionSpace = action_space
         self._exploration_module: ExplorationModule = exploration_module
         assert action_representation_module.representation_dim != -1
         self._action_representation_module = action_representation_module
@@ -86,15 +87,11 @@ class PolicyLearner(torch.nn.Module, ABC):
     def get_action_representation_module(self) -> ActionRepresentationModule:
         return self._action_representation_module
 
-    def reset(self, action_space: ActionSpace) -> None:
-        """Resets policy maker for a new episode. Default implementation does nothing."""
-        pass
 
     @abstractmethod
     def act(
         self,
         subjective_state: SubjectiveState,
-        available_action_space: ActionSpace,
         exploit: bool = False,
     ) -> Action:
         pass

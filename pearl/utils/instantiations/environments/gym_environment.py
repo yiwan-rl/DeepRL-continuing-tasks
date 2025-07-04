@@ -118,12 +118,8 @@ class GymEnvironment(Environment):
         """Takes one step in the environment given the agent's action. Returns an
         `ActionResult` object containing the next observation, reward, and done flag."""
         # Convert action to the format expected by Gymnasium
-        effective_action = _get_gym_action(
-            pearl_action=action,
-            gym_space=self.env.action_space,
-        )
         # Take a step in the environment and receive an action result
-        gym_action_result = self.env.step(effective_action)
+        gym_action_result = self.env.step(action)
         if len(gym_action_result) == 4:
             # Older Gym versions use 'done' as opposed to 'terminated' and 'truncated'
             observation, reward, done, info = gym_action_result  # pyre-ignore
@@ -145,11 +141,6 @@ class GymEnvironment(Environment):
         else:
             cost = None
 
-        if "available_action_space" in info.keys():
-            available_action_space = info["available_action_space"]
-        else:
-            available_action_space = None
-
         if observation.dtype == np.float64:
             observation = observation.astype(np.float32)
         if isinstance(reward, np.float64):
@@ -157,15 +148,8 @@ class GymEnvironment(Environment):
         if isinstance(cost, np.float64):
             cost = cost.astype(np.float32)
 
-        return ActionResult(
-            observation=observation,
-            reward=reward,
-            terminated=terminated,
-            truncated=truncated,
-            info=info,
-            cost=cost,
-            available_action_space=available_action_space,
-        )
+        return observation, reward, terminated, truncated, info
+
 
     def render(self) -> None:
         self.env.render()

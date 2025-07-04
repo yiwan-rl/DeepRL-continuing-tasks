@@ -26,6 +26,7 @@ from pearl.policy_learners.sequential_decision_making.deep_td_learning import (
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import optim
+from pearl.api.action_space import ActionSpace
 
 
 class DeepQLearning(DeepTDLearning):
@@ -35,6 +36,7 @@ class DeepQLearning(DeepTDLearning):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         network_instance: QValueNetwork,
         optimizer: optim.Optimizer,
         action_representation_module: ActionRepresentationModule,
@@ -89,6 +91,7 @@ class DeepQLearning(DeepTDLearning):
         """
 
         super(DeepQLearning, self).__init__(
+            action_space=action_space,
             exploration_module=exploration_module,
             soft_update_tau=soft_update_tau,
             action_representation_module=action_representation_module,

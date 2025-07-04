@@ -40,6 +40,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.preprocessing import RunningMeanStd
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
+from pearl.api.action_space import ActionSpace
 
 
 class ProximalPolicyOptimization(ActorCriticBase):
@@ -50,6 +51,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[ValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
@@ -80,6 +82,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
             else:
                 exploration_module = PropensityExploration()
         super(ProximalPolicyOptimization, self).__init__(
+            action_space=action_space,
             use_actor_target=False,
             use_critic_target=False,
             actor_soft_update_tau=0.0,  # not used

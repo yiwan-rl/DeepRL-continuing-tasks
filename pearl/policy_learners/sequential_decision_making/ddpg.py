@@ -31,6 +31,7 @@ from pearl.utils.functional_utils.learning.critic_utils import (
     ensemble_critic_action_value_loss,
 )
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
+from pearl.api.action_space import ActionSpace
 from torch import nn, optim
 
 
@@ -42,6 +43,7 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
 
     def __init__(
         self,
+        action_space: ActionSpace,
         actor_network_instance: ActorNetwork,
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
@@ -58,6 +60,7 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
         super(DeepDeterministicPolicyGradient, self).__init__(
+            action_space=action_space,
             use_actor_target=True,
             use_critic_target=True,
             ensemble_critic_size=ensemble_critic_size,

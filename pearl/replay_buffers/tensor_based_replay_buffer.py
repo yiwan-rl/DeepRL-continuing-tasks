@@ -28,12 +28,12 @@ class TensorBasedReplayBuffer(ReplayBuffer):
     ) -> None:
         super(TensorBasedReplayBuffer, self).__init__()
         self.capacity = capacity
-        self.observations: Optional[np.ndarray] = None
-        self.actions: Optional[np.ndarray] = None
-        self.rewards: Optional[np.ndarray] = None
-        self.terminateds: Optional[np.ndarray] = None
-        self.truncateds: Optional[np.ndarray] = None
-        self.next_observations: Optional[np.ndarray] = None
+        self.observations: Optional[torch.Tensor] = None
+        self.actions: Optional[torch.Tensor] = None
+        self.rewards: Optional[torch.Tensor] = None
+        self.terminateds: Optional[torch.Tensor] = None
+        self.truncateds: Optional[torch.Tensor] = None
+        self.next_observations: Optional[torch.Tensor] = None
         self.pos = 0
         self.full = False
         self._device_for_batches: torch.device = get_default_device()
@@ -50,19 +50,19 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         if self.capacity == 0:
             return
         if self.observations is None:
-            self.observations = np.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
+            self.observations = torch.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
             # pyre-fixme
-            self.actions = np.zeros((self.capacity,) + action.shape, dtype=action.dtype)
-            self.rewards = np.zeros(self.capacity, dtype=np.float32)
-            self.terminateds = np.zeros(self.capacity, dtype=bool)
-            self.truncateds = np.zeros(self.capacity, dtype=bool)
-            self.next_observations = np.zeros(
+            self.actions = torch.zeros((self.capacity,) + action.shape, dtype=action.dtype)
+            self.rewards = torch.zeros((self.capacity), dtype=torch.float32)
+            self.terminateds = torch.zeros((self.capacity), dtype=torch.bool)
+            self.truncateds = torch.zeros((self.capacity), dtype=torch.bool)
+            self.next_observations = torch.zeros(
                 (self.capacity,) + next_obs.shape, dtype=next_obs.dtype
             )
         # pyre-fixme
         self.observations[self.pos] = obs
         self.actions[self.pos] = action
-        self.rewards[self.pos] = reward
+        self.rewards[self.pos] = reward.item()
         self.terminateds[self.pos] = terminated
         self.truncateds[self.pos] = truncated
         self.next_observations[self.pos] = next_obs
@@ -87,8 +87,8 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         next_state, next_action, and terminated.
         """
         assert batch_size <= self.pos
-        batch_inds = np.random.randint(
-            max(self.pos - last_k_steps, 0), self.pos, size=batch_size
+        batch_inds = torch.randint(
+            max(self.pos - last_k_steps, 0), self.pos, size=(batch_size,)
         )
         batch = TransitionBatch(
             # pyre-fixme
@@ -126,9 +126,9 @@ class TensorBasedReplayBuffer(ReplayBuffer):
                 f"only {len(self)} elements"
             )
         if self.full is True:
-            batch_inds = np.random.randint(0, self.capacity, size=batch_size)
+            batch_inds = torch.randint(0, self.capacity, size=(batch_size,))
         else:
-            batch_inds = np.random.randint(0, self.pos, size=batch_size)
+            batch_inds = torch.randint(0, self.pos, size=(batch_size,))
 
         batch = TransitionBatch(
             # pyre-fixme
