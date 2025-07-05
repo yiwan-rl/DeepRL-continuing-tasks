@@ -83,6 +83,7 @@ from pearl.replay_buffers import (
     ReplayBuffer,
     sequential_decision_making as replay_buffers,
 )
+from concurrent.futures import ThreadPoolExecutor
 
 from pearl.user_envs.wrappers import (
     EpisodicLifeEnv,
@@ -748,134 +749,141 @@ def train_continuing(
 
     start_time = time.time()
 
-    # starts the training loop
-    while steps < max_steps:
-        # agent takes an action
-        action = train_agent.act(exploit=False)
 
-        # environment receives the action and returns the result
-        observation, reward, terminated, truncated, info = train_env.step(action)
-        original_reward = reward
-        for preprocessor in preprocessors:
-            observation, reward, terminated, truncated, info =preprocessor.process(observation, reward, terminated, truncated, info)
-        clipped_reward = reward
-        num_resets = info.get("num_resets", 0)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        # starts the training loop
+        while steps < max_steps:
+            # agent takes an action
+            action = train_agent.act(exploit=False)
 
-        steps += 1
+            # send environment step to background thread so that it can be done in parallel with the agent learn
+            future = executor.submit(train_env.step, action)
 
-        # agent observes the new result of the action
-        train_agent.observe(observation, reward, terminated, truncated, info)
-
-        # agent learns
-        if (
-            steps >= learning_starts
-            and steps % learn_every_k_steps == 0
-        ):
-            report = train_agent.learn()
-        else:
-            report = {}
-        
-        # update stats
-        cum_reward += original_reward
-        cum_reset += num_resets
-        cum_clipped_reward += clipped_reward
-        for key in report:
-            learning_report_cache.setdefault(key, []).append(report[key])
-
-        # print stats
-        if steps % print_every_x_steps == 0:
-            actor_loss = (
-                np.mean(learning_report_cache["actor_loss"])
-                if "actor_loss" in learning_report_cache
-                else None
-            )
-            critic_loss = (
-                np.mean(learning_report_cache["critic_loss"])
-                if "critic_loss" in learning_report_cache
-                else None
-            )
-            message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
-            last_cum_clipped_reward_print = cum_clipped_reward
-            last_cum_reward_print = cum_reward
-            last_cum_reset_print = cum_reset
-            end_time = time.time()
-            SPS = int((steps - last_timed_steps) / (end_time - start_time))
-            logger.info(f"samples per second: {SPS}")
-            logger.info(message)
-            start_time = end_time
-            last_timed_steps = steps
-
-        # record visited observations
-        if record_visited_observations is True and steps % observation_record_period == 0:
-            experiment_stats["visited_observations"].append(observation)
-
-        # record stats
-        if steps % record_period == 0:
-            # record the average reward over the last record_period time steps
-            experiment_stats["avg_reward_list"].append(
-                (cum_reward - last_cum_reward_record) / record_period
-            )
-            last_cum_reward_record = cum_reward
-
-            # record the average reset over the last record_period time steps
-            experiment_stats["avg_reset_list"].append((
-                cum_reset - last_cum_reset_record) / record_period
-            )
-            last_cum_reset_record = cum_reset
-
-            # record the average clipped reward over the last record_period time steps
-            experiment_stats["avg_clipped_reward_list"].append(
-                (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
-            )
-            last_cum_clipped_reward_record = cum_clipped_reward
-
-            # evaluate the learned policy in an episodic and a continuing versions of the environment
-            if eval_in_episodic_env:
-                (
-                    eval_episodic_return,
-                    eval_episodic_clipped_return,
-                ) = eval_episodic(
-                    eval_episodic_agent=eval_episodic_agent,
-                    eval_episodic_env=eval_episodic_env,
-                    eval_max_steps=eval_max_steps,
-                    preprocessors=preprocessors,
-                )
+            # agent learns
+            if (
+                steps >= learning_starts
+                and (steps+1) % learn_every_k_steps == 0
+            ):
+                report = train_agent.learn()
             else:
-                eval_episodic_return = None
-                eval_episodic_clipped_return = None
+                report = {}
 
-            if eval_in_continuing_env:
-                (
-                    eval_average_reward,
-                    eval_average_clipped_reward,
-                    eval_average_reset,
-                ) = eval_continuing(
-                    eval_continuing_agent=eval_continuing_agent,
-                    eval_continuing_env=eval_continuing_env,
-                    eval_max_steps=eval_max_steps,
-                    preprocessors=preprocessors,
+            # environment receives the action and returns the result
+            observation, reward, terminated, truncated, info = future.result()
+
+            original_reward = reward
+            for preprocessor in preprocessors:
+                observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
+            clipped_reward = reward
+            num_resets = info.get("num_resets", 0)
+
+            steps += 1
+
+            # agent observes the new result of the action
+            train_agent.observe(observation, reward, terminated, truncated, info)
+
+            
+            # update stats
+            cum_reward = cum_reward + original_reward
+            cum_reset = cum_reset + num_resets
+            cum_clipped_reward = cum_clipped_reward + clipped_reward
+            for key in report:
+                learning_report_cache.setdefault(key, []).append(report[key])
+
+            # print stats
+            if steps % print_every_x_steps == 0:
+                actor_loss = (
+                    np.mean(learning_report_cache["actor_loss"])
+                    if "actor_loss" in learning_report_cache
+                    else None
                 )
-            else:
-                eval_average_reward = None
-                eval_average_clipped_reward = None
-                eval_average_reset = None
-
-            if eval_episodic_return is not None:
-                experiment_stats["eval_episodic_return_list"].append(eval_episodic_return)
-            if eval_average_reward is not None:
-                experiment_stats["eval_average_reward_list"].append(eval_average_reward)
-            if eval_episodic_clipped_return is not None:
-                experiment_stats["eval_episodic_clipped_return_list"].append(eval_episodic_clipped_return)
-            if eval_average_clipped_reward is not None:
-                experiment_stats["eval_average_clipped_reward_list"].append(eval_average_clipped_reward)
-            if eval_average_reset is not None:
-                experiment_stats["eval_average_reset_list"].append(eval_average_reset)
-
-            # record stats in learning report
-            for key in learning_report_cache:
-                experiment_stats["learning_report"].setdefault(key, []).append(
-                    np.mean(learning_report_cache[key])
+                critic_loss = (
+                    np.mean(learning_report_cache["critic_loss"])
+                    if "critic_loss" in learning_report_cache
+                    else None
                 )
+                message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+                last_cum_clipped_reward_print = cum_clipped_reward
+                last_cum_reward_print = cum_reward
+                last_cum_reset_print = cum_reset
+                end_time = time.time()
+                SPS = int((steps - last_timed_steps) / (end_time - start_time))
+                logger.info(f"samples per second: {SPS}")
+                logger.info(message)
+                start_time = end_time
+                last_timed_steps = steps
+
+            # record visited observations
+            if record_visited_observations is True and steps % observation_record_period == 0:
+                experiment_stats["visited_observations"].append(observation)
+
+            # record stats
+            if steps % record_period == 0:
+                # record the average reward over the last record_period time steps
+                experiment_stats["avg_reward_list"].append(
+                    (cum_reward - last_cum_reward_record) / record_period
+                )
+                last_cum_reward_record = cum_reward
+
+                # record the average reset over the last record_period time steps
+                experiment_stats["avg_reset_list"].append((
+                    cum_reset - last_cum_reset_record) / record_period
+                )
+                last_cum_reset_record = cum_reset
+
+                # record the average clipped reward over the last record_period time steps
+                experiment_stats["avg_clipped_reward_list"].append(
+                    (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
+                )
+                last_cum_clipped_reward_record = cum_clipped_reward
+
+                # evaluate the learned policy in an episodic and a continuing versions of the environment
+                if eval_in_episodic_env:
+                    (
+                        eval_episodic_return,
+                        eval_episodic_clipped_return,
+                    ) = eval_episodic(
+                        eval_episodic_agent=eval_episodic_agent,
+                        eval_episodic_env=eval_episodic_env,
+                        eval_max_steps=eval_max_steps,
+                        preprocessors=preprocessors,
+                    )
+                else:
+                    eval_episodic_return = None
+                    eval_episodic_clipped_return = None
+
+                if eval_in_continuing_env:
+                    (
+                        eval_average_reward,
+                        eval_average_clipped_reward,
+                        eval_average_reset,
+                    ) = eval_continuing(
+                        eval_continuing_agent=eval_continuing_agent,
+                        eval_continuing_env=eval_continuing_env,
+                        eval_max_steps=eval_max_steps,
+                        preprocessors=preprocessors,
+                    )
+                else:
+                    eval_average_reward = None
+                    eval_average_clipped_reward = None
+                    eval_average_reset = None
+
+                if eval_episodic_return is not None:
+                    experiment_stats["eval_episodic_return_list"].append(eval_episodic_return)
+                if eval_average_reward is not None:
+                    experiment_stats["eval_average_reward_list"].append(eval_average_reward)
+                if eval_episodic_clipped_return is not None:
+                    experiment_stats["eval_episodic_clipped_return_list"].append(eval_episodic_clipped_return)
+                if eval_average_clipped_reward is not None:
+                    experiment_stats["eval_average_clipped_reward_list"].append(eval_average_clipped_reward)
+                if eval_average_reset is not None:
+                    experiment_stats["eval_average_reset_list"].append(eval_average_reset)
+
+                # record stats in learning report
+                for key in learning_report_cache:
+                    experiment_stats["learning_report"].setdefault(key, []).append(
+                        np.mean(learning_report_cache[key])
+                    )
 
     # save all the recorded stats
     save_data_dict = {
