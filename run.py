@@ -109,7 +109,7 @@ from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC
 from pearl.utils.instantiations.environments.gym_environment import GymEnvironment
 from pearl.utils.instantiations.spaces import BoxActionSpace, DiscreteActionSpace
 
-
+logging.basicConfig(level=logging.INFO)
 logger: logging.Logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -1139,7 +1139,7 @@ if __name__ == "__main__":
         )
         param_sweeper_dict["replay_buffer"] = init_class(replay_buffer_class, "replay_buffer", param_sweeper_dict)
     else:
-        print("Replay buffer must be specified")
+        logger.info("Replay buffer must be specified")
         raise NotImplementedError
 
     """
@@ -1513,7 +1513,7 @@ if __name__ == "__main__":
             if not os.path.exists(model_folder):
                 os.makedirs(model_folder)
             model_path = model_folder + str(run_id)
-            print(f"Saving model to {model_path}")
+            logger.info(f"Saving model to {model_path}")
             train_agent.policy_learner.save_model(path=model_path)
 
             for p in param_sweeper_dict["preprocessors"]:
@@ -1524,4 +1524,4 @@ if __name__ == "__main__":
                     ) as file:
                         pickle.dump(p, file)
     end_time = time.time()
-    print(f"Time taken: {(end_time - start_time) / 60} minutes")
+    logger.info(f"Time taken: {(end_time - start_time) / 60} minutes")
