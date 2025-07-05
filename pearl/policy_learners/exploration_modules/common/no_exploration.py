@@ -17,7 +17,6 @@ from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.common.score_exploration_base import (
     ScoreExplorationBase,
 )
-from pearl.utils.instantiations.spaces.discrete import DiscreteSpace
 
 
 class NoExploration(ScoreExplorationBase):
@@ -37,6 +36,5 @@ class NoExploration(ScoreExplorationBase):
     ) -> Action:
         if exploit_action is not None:
             raise ValueError("exploit_action shouldn't be used. use `values` instead")
-        assert isinstance(action_space, DiscreteSpace)
         assert values is not None
         return values.view(-1, action_space.n)  # batch_size, action_count

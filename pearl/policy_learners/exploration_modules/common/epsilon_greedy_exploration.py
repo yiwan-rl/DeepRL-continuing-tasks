@@ -18,7 +18,6 @@ from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.common.uniform_exploration_base import (
     UniformExplorationBase,
 )
-from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 
 
 class EGreedyExploration(UniformExplorationBase):
@@ -77,8 +76,6 @@ class EGreedyExploration(UniformExplorationBase):
             raise ValueError(
                 "exploit_action cannot be None for epsilon-greedy exploration"
             )
-        if not isinstance(action_space, DiscreteActionSpace):
-            raise TypeError("action space must be discrete")
         if random.random() < self.curr_epsilon:
             return action_space.sample(action_availability_mask).to(
                 exploit_action.device

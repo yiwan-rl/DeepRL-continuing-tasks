@@ -20,7 +20,6 @@ from pearl.neural_networks.sequential_decision_making.actor_networks import (
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
-from pearl.utils.instantiations.spaces.box_action import BoxActionSpace
 
 
 class NormalDistributionExploration(ExplorationModule):
@@ -47,7 +46,6 @@ class NormalDistributionExploration(ExplorationModule):
         action_availability_mask: Optional[torch.Tensor] = None,
         representation: Optional[torch.nn.Module] = None,
     ) -> Action:
-        assert isinstance(action_space, BoxActionSpace)
         assert exploit_action is not None
         device = exploit_action.device
         # checks that the exploit action is feasible in the available action space
