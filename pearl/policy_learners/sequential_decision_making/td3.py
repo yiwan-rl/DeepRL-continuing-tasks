@@ -10,9 +10,6 @@
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.neural_networks.common.utils import update_target_network
 from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
@@ -48,7 +45,6 @@ class TD3(DeepDeterministicPolicyGradient):
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         actor_soft_update_tau: float = 0.005,
         critic_soft_update_tau: float = 0.005,
@@ -70,7 +66,6 @@ class TD3(DeepDeterministicPolicyGradient):
             discount_factor=discount_factor,
             training_rounds=training_rounds,
             batch_size=batch_size,
-            action_representation_module=action_representation_module,
             ensemble_critic_size=ensemble_critic_size,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,

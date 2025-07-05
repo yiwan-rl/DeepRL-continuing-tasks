@@ -13,10 +13,6 @@ from typing import Any, Dict, Optional, Union
 
 import torch
 
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
-
 from pearl.api.action import Action
 
 from pearl.api.action_space import ActionSpace
@@ -57,7 +53,6 @@ class ActorCriticBase(PolicyLearner):
         critic_network_instance: Union[ValueNetwork, QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         use_actor_target: bool = False,
         use_critic_target: bool = False,
@@ -79,7 +74,6 @@ class ActorCriticBase(PolicyLearner):
             training_rounds=training_rounds,
             batch_size=batch_size,
             exploration_module=exploration_module,
-            action_representation_module=action_representation_module,
             reward_rate=reward_rate,
             reward_centering=reward_centering,
         )

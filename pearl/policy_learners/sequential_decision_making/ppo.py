@@ -11,9 +11,6 @@ import math
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.neural_networks.common.value_networks import ValueNetwork
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     action_scaling,
@@ -56,7 +53,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
         critic_network_instance: Union[ValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
         discount_factor: float = 0.99,
@@ -93,7 +89,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=is_action_continuous,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,

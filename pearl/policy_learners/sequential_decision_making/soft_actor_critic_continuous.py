@@ -10,9 +10,6 @@
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
@@ -43,7 +40,6 @@ class ContinuousSoftActorCritic(ActorCriticBase):
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         critic_soft_update_tau: float = 0.005,
         discount_factor: float = 0.99,
@@ -68,7 +64,6 @@ class ContinuousSoftActorCritic(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=True,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,
@@ -90,7 +85,7 @@ class ContinuousSoftActorCritic(ActorCriticBase):
             self.register_buffer("_entropy_coef", torch.exp(self._log_entropy).detach())
             self.register_buffer(
                 "_target_entropy",
-                -torch.tensor(action_representation_module.representation_dim)
+                -torch.tensor(self._action_space.action_dim)
                 + target_entropy_offset,
             )
         else:

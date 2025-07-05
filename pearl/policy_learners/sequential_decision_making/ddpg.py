@@ -10,9 +10,6 @@
 from typing import Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     ActorNetwork,
 )
@@ -48,7 +45,6 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         ensemble_critic_size: int = 1,
         actor_soft_update_tau: float = 0.005,
@@ -71,7 +67,6 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=True,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,

@@ -10,9 +10,6 @@
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.action_space import ActionSpace
 from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
@@ -50,7 +47,6 @@ class SoftActorCritic(ActorCriticBase):
         critic_network_instance: Union[QValueNetwork, nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         critic_soft_update_tau: float = 1,
         critic_target_update_freq: int = 8000,
@@ -78,7 +74,6 @@ class SoftActorCritic(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=False,
-            action_representation_module=action_representation_module,
             actor_network_instance=actor_network_instance,
             critic_network_instance=critic_network_instance,
             actor_optimizer=actor_optimizer,
@@ -109,7 +104,7 @@ class SoftActorCritic(ActorCriticBase):
                 "_target_entropy",
                 -target_entropy_scale
                 * torch.log(
-                    torch.tensor(1.0 / action_representation_module.max_number_actions)
+                    torch.tensor(1.0 / self._action_space.n)
                 ),
             )
         else:
@@ -200,11 +195,7 @@ class SoftActorCritic(ActorCriticBase):
             self.all_action_batch is None
             or self.all_action_batch.shape[0] != state_batch.shape[0]
         ):
-            self.all_action_batch = self._action_representation_module(
-                self._action_space.actions_batch.unsqueeze(0)
-                .repeat(state_batch.shape[0], 1, 1)
-                .to(self.device)
-            )
+            self.all_action_batch = self._action_space.actions_batch.unsqueeze(0).repeat(state_batch.shape[0], 1, 1).to(self.device)
         # get q values of (states, all actions) from twin critics
         qs = self._critic.get_q_values(
             state_batch=state_batch,

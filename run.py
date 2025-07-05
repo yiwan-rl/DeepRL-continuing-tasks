@@ -25,14 +25,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-
 # pyre-fixme
 from alphaex.sweeper import Sweeper
-from pearl import action_representation_modules
-from pearl.action_representation_modules import IdentityActionRepresentationModule
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.observation import Observation
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.neural_networks.common import value_networks
@@ -1059,14 +1053,6 @@ if __name__ == "__main__":
 
     param_sweeper_dict["action_space"] = train_env.action_space
     param_sweeper_dict["preprocessors"] = []
-    if isinstance(env.action_space, DiscreteActionSpace):
-        max_number_actions: int = env.action_space.n
-        action_dim: int = env.action_space.action_dim
-    elif isinstance(env.action_space, BoxActionSpace):
-        max_number_actions = -1
-        action_dim = env.action_space.action_dim
-    else:
-        raise NotImplementedError
 
     """
     Initialize preprocessors
@@ -1086,47 +1072,6 @@ if __name__ == "__main__":
         )
 
     """
-    Initialize action representation module
-    """
-
-    if "action_representation_module:type" in param_sweeper_dict:
-        # if action representation module name is specified, initialize a module
-        if param_sweeper_dict["action_representation_module:type"] in [
-            "OneHotActionTensorRepresentationModule",
-        ]:
-            param_sweeper_dict["action_representation_module:max_number_actions"] = (
-                max_number_actions
-            )
-        elif param_sweeper_dict["action_representation_module:type"] in [
-            "IdentityActionRepresentationModule"
-        ]:
-            param_sweeper_dict["action_representation_module:representation_dim"] = (
-                action_dim
-            )
-        else:
-            raise NotImplementedError
-        action_representation_module_class: Type[ActionRepresentationModule] = getattr(
-            action_representation_modules,
-            param_sweeper_dict["action_representation_module:type"],
-        )
-        init_class(
-            action_representation_module_class,
-            "action_representation_module",
-            param_sweeper_dict,
-        )
-    else:
-        param_sweeper_dict["action_representation_module"] = (
-            IdentityActionRepresentationModule(
-                max_number_actions=max_number_actions,
-                representation_dim=action_dim,
-            )
-        )
-
-    action_representation_dim: int = param_sweeper_dict[
-        "action_representation_module"
-    ].representation_dim
-
-    """
     Initialize exploration module
     """
 
@@ -1143,9 +1088,7 @@ if __name__ == "__main__":
             assert len(param_sweeper_dict["exploration_module:std_dev"]) == 2
             tmp: torch.Tensor = (
                 torch.ones(
-                    param_sweeper_dict[
-                        "action_representation_module:representation_dim"
-                    ]
+                    train_env.action_space.action_dim
                 )
                 * param_sweeper_dict["exploration_module:std_dev"][0]
             )
@@ -1179,7 +1122,7 @@ if __name__ == "__main__":
         assert len(param_sweeper_dict["actor_update_noise"]) == 2
         tmp = (
             torch.ones(
-                param_sweeper_dict["action_representation_module:representation_dim"]
+                train_env.action_space.action_dim
             )
             * param_sweeper_dict["actor_update_noise"][0]
         )
@@ -1226,7 +1169,7 @@ if __name__ == "__main__":
             )
         else:
             raise NotImplementedError
-        param_sweeper_dict["network_instance:action_dim"] = action_representation_dim
+        param_sweeper_dict["network_instance:action_dim"] = env.action_space.action_dim
         network_class: Type[QValueNetwork] = getattr(
             q_value_networks, param_sweeper_dict["network_instance:type"]
         )
@@ -1254,9 +1197,9 @@ if __name__ == "__main__":
         else:
             raise NotImplementedError
         param_sweeper_dict["actor_network_instance:output_dim"] = (
-            action_representation_dim
-            if max_number_actions == -1  # continuous actions
-            else max_number_actions  # discrete actions
+            train_env.action_space.action_dim
+            if isinstance(train_env.action_space, BoxActionSpace)
+            else train_env.action_space.n
         )
         param_sweeper_dict["actor_network_instance:action_space"] = env.action_space
         actor_class: Type[ActorNetwork] = getattr(
@@ -1315,7 +1258,7 @@ if __name__ == "__main__":
                 else:
                     raise NotImplementedError
                 param_sweeper_dict["critic_member_network:action_dim"] = (
-                    action_representation_dim
+                    env.action_space.action_dim
                 )
                 member_network_class = getattr(
                     q_value_networks,

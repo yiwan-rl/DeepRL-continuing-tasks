@@ -12,9 +12,6 @@ from abc import abstractmethod
 from typing import Any, Dict, Optional
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
@@ -47,7 +44,6 @@ class DeepTDLearning(PolicyLearner):
         action_space: ActionSpace,
         network_instance: QValueNetwork,
         optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
         training_rounds: int = 100,
@@ -94,9 +90,6 @@ class DeepTDLearning(PolicyLearner):
                 Note: This is an alternative to specifying a `network_type`. If provided, the
                 specified `network_type` is ignored and the input `network_instance` is used for
                 learning. Allows for custom implementations of Q-value networks.
-            action_representation_module (ActionRepresentationModule, optional): Optional module to
-                represent actions as a feature vector. Typically specified at the agent level.
-                Defaults to None.
         """
         super(DeepTDLearning, self).__init__(
             action_space=action_space,
@@ -104,7 +97,6 @@ class DeepTDLearning(PolicyLearner):
             batch_size=batch_size,
             exploration_module=exploration_module,
             is_action_continuous=False,
-            action_representation_module=action_representation_module,
             reward_rate=reward_rate,
             reward_centering=reward_centering,
         )
@@ -148,18 +140,15 @@ class DeepTDLearning(PolicyLearner):
         assert isinstance(self._action_space, DiscreteActionSpace)
         with torch.no_grad():
             batched_subjective_state = subjective_state.unsqueeze(0)  # (1 x state_dim)
-            batched_actions_representation = self._action_representation_module(
-                self._action_space.actions_batch.to(batched_subjective_state)
-            ).unsqueeze(
-                0
-            )  # (1 x number of actions x action_dim)
-
+            batched_actions_representation = self._action_space.actions_batch.unsqueeze(0).to(self.device)  # (1 x number of actions x action_dim)
             q_values = self._Q.get_q_values(
                 state_batch=batched_subjective_state,
                 action_batch=batched_actions_representation,
             )  # (1 x number of actions)
             # this does a forward pass since all avaialble
             # actions are already stacked together
+            q_values = q_values.squeeze(0)  # (number of actions)
+            exploit_action_index = torch.argmax(q_values)
             exploit_action = self._action_space.actions[exploit_action_index]
 
         if exploit:

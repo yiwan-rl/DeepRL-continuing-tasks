@@ -10,9 +10,6 @@
 from typing import Any, Optional
 
 import torch
-from pearl.action_representation_modules.action_representation_module import (
-    ActionRepresentationModule,
-)
 
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     QValueNetwork,
@@ -39,7 +36,6 @@ class DeepQLearning(DeepTDLearning):
         action_space: ActionSpace,
         network_instance: QValueNetwork,
         optimizer: optim.Optimizer,
-        action_representation_module: ActionRepresentationModule,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
         training_rounds: int = 10,
@@ -80,9 +76,6 @@ class DeepQLearning(DeepTDLearning):
                 `VanillaQValueNetwork`. This means that by default, an instance of the class
                 `VanillaQValueNetwork` (or the specified `network_type` class) is created and used
                 for learning.
-            action_representation_module (ActionRepresentationModule, optional): Optional module to
-                represent actions as a feature vector. Typically specified at the agent level.
-                Defaults to None.
             network_instance (QValueNetwork, optional): A network instance to be used as the
                 Q-value network. Defaults to None.
                 Note: This is an alternative to specifying a `network_type`. If provided, the
@@ -94,7 +87,6 @@ class DeepQLearning(DeepTDLearning):
             action_space=action_space,
             exploration_module=exploration_module,
             soft_update_tau=soft_update_tau,
-            action_representation_module=action_representation_module,
             discount_factor=discount_factor,
             training_rounds=training_rounds,
             batch_size=batch_size,
@@ -130,11 +122,7 @@ class DeepQLearning(DeepTDLearning):
             self.all_action_batch is None
             or self.all_action_batch.shape[0] != next_state.shape[0]
         ):
-            self.all_action_batch = self._action_representation_module(
-                self._action_space.actions_batch.unsqueeze(0)
-                .repeat(next_state.shape[0], 1, 1)
-                .to(self.device)
-            )
+            self.all_action_batch = self._action_space.actions_batch.unsqueeze(0).repeat(next_state.shape[0], 1, 1).to(self.device)
 
         # Get Q values for each (state, action), where action \in {available_actions}
         next_state_action_values = self._Q_target.get_q_values(
