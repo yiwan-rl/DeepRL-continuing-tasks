@@ -16,12 +16,6 @@ from pearl.neural_networks.sequential_decision_making.actor_networks import (
     action_scaling,
     ActorNetwork,
 )
-from pearl.policy_learners.exploration_modules.common.no_exploration import (
-    NoExploration,
-)
-from pearl.policy_learners.exploration_modules.common.propensity_exploration import (
-    PropensityExploration,
-)
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -72,11 +66,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
         reward_rate: torch.Tensor = torch.tensor(0.0),
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
     ) -> None:
-        if exploration_module is None:
-            if is_action_continuous:
-                exploration_module = NoExploration()
-            else:
-                exploration_module = PropensityExploration()
         super(ProximalPolicyOptimization, self).__init__(
             action_space=action_space,
             use_actor_target=False,
