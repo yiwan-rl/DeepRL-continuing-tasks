@@ -938,8 +938,7 @@ def init_class(
             and key[len(prefix) :] != "type"
         ):
             filtered_dict[key[len(prefix) :]] = value
-    # logger.info(filtered_dict)
-    param_sweeper_dict[module_name] = module_class(**filtered_dict)
+    return module_class(**filtered_dict)
 
 
 def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
@@ -1094,7 +1093,7 @@ if __name__ == "__main__":
             )
             tmp[-1] = param_sweeper_dict["exploration_module:std_dev"][1]
             param_sweeper_dict["exploration_module:std_dev"] = tmp
-        init_class(exploration_module_class, "exploration_module", param_sweeper_dict)
+        param_sweeper_dict["exploration_module"] = init_class(exploration_module_class, "exploration_module", param_sweeper_dict)
         if "exploration_module_wrapper:type" in param_sweeper_dict:
             # if exploration wrapper module name is specified, initialize an exploration module
             exploration_wrapper_class: Type[ExplorationModuleWrapper] = getattr(
@@ -1104,7 +1103,7 @@ if __name__ == "__main__":
             param_sweeper_dict["exploration_module_wrapper:exploration_module"] = (
                 param_sweeper_dict["exploration_module"]
             )
-            init_class(
+            param_sweeper_dict["exploration_module_wrapper"] = init_class(
                 exploration_wrapper_class,
                 "exploration_module_wrapper",
                 param_sweeper_dict,
@@ -1138,7 +1137,7 @@ if __name__ == "__main__":
         replay_buffer_class: Type[ReplayBuffer] = getattr(
             replay_buffers, param_sweeper_dict["replay_buffer:type"]
         )
-        init_class(replay_buffer_class, "replay_buffer", param_sweeper_dict)
+        param_sweeper_dict["replay_buffer"] = init_class(replay_buffer_class, "replay_buffer", param_sweeper_dict)
     else:
         print("Replay buffer must be specified")
         raise NotImplementedError
@@ -1173,7 +1172,7 @@ if __name__ == "__main__":
         network_class: Type[QValueNetwork] = getattr(
             q_value_networks, param_sweeper_dict["network_instance:type"]
         )
-        init_class(network_class, "network_instance", param_sweeper_dict)
+        param_sweeper_dict["network_instance"] = init_class(network_class, "network_instance", param_sweeper_dict)
 
     if "actor_network_instance:type" in param_sweeper_dict:
         # if actor network is specified, intialize one
@@ -1205,7 +1204,7 @@ if __name__ == "__main__":
         actor_class: Type[ActorNetwork] = getattr(
             actor_networks, param_sweeper_dict["actor_network_instance:type"]
         )
-        init_class(actor_class, "actor_network_instance", param_sweeper_dict)
+        param_sweeper_dict["actor_network_instance"] = init_class(actor_class, "actor_network_instance", param_sweeper_dict)
 
     if "critic_network_instance:type" in param_sweeper_dict:
         # if critic network is specified, intialize one
@@ -1218,7 +1217,7 @@ if __name__ == "__main__":
             param_sweeper_dict["critic_network_instance:input_dim"] = (
                 env.observation_space.shape[0]
             )
-            init_class(critic_class, "critic_network_instance", param_sweeper_dict)
+            param_sweeper_dict["critic_network_instance"] = init_class(critic_class, "critic_network_instance", param_sweeper_dict)
         elif param_sweeper_dict["critic_network_instance:type"] in [
             "CNNValueNetwork",
         ]:
@@ -1228,7 +1227,7 @@ if __name__ == "__main__":
             param_sweeper_dict["critic_network_instance:input_width"] = 84
             param_sweeper_dict["critic_network_instance:input_height"] = 84
             param_sweeper_dict["critic_network_instance:input_channels_count"] = 4
-            init_class(critic_class, "critic_network_instance", param_sweeper_dict)
+            param_sweeper_dict["critic_network_instance"] = init_class(critic_class, "critic_network_instance", param_sweeper_dict)
         elif param_sweeper_dict["critic_network_instance:type"] in [
             "EnsembleQValueNetwork",
         ]:
@@ -1337,7 +1336,7 @@ if __name__ == "__main__":
         param_sweeper_dict["optimizer:params"] = param_sweeper_dict[
             "network_instance"
         ].parameters()
-        init_class(optimizer_class, "optimizer", param_sweeper_dict)
+        param_sweeper_dict["optimizer"] = init_class(optimizer_class, "optimizer", param_sweeper_dict)
 
     if "actor_optimizer:type" in param_sweeper_dict:
         assert "actor_network_instance" in param_sweeper_dict
@@ -1347,7 +1346,7 @@ if __name__ == "__main__":
         param_sweeper_dict["actor_optimizer:params"] = param_sweeper_dict[
             "actor_network_instance"
         ].parameters()
-        init_class(actor_optimizer_class, "actor_optimizer", param_sweeper_dict)
+        param_sweeper_dict["actor_optimizer"] = init_class(actor_optimizer_class, "actor_optimizer", param_sweeper_dict)
 
     if "critic_optimizer:type" in param_sweeper_dict:
         assert "critic_network_instance" in param_sweeper_dict
@@ -1357,7 +1356,7 @@ if __name__ == "__main__":
         param_sweeper_dict["critic_optimizer:params"] = param_sweeper_dict[
             "critic_network_instance"
         ].parameters()
-        init_class(critic_optimizer_class, "critic_optimizer", param_sweeper_dict)
+        param_sweeper_dict["critic_optimizer"] = init_class(critic_optimizer_class, "critic_optimizer", param_sweeper_dict)
 
     if param_sweeper_dict.get("reward_centering:type", None) is not None:
         if param_sweeper_dict["reward_centering:type"] == "TD":
@@ -1367,17 +1366,17 @@ if __name__ == "__main__":
             param_sweeper_dict["reward_rate_optimizer:params"] = [
                 param_sweeper_dict["reward_rate"]
             ]
-            init_class(
+            param_sweeper_dict["reward_rate_optimizer"] = init_class(
                 reward_rate_optimizer_class, "reward_rate_optimizer", param_sweeper_dict
             )
             param_sweeper_dict["reward_centering:optimizer"] = param_sweeper_dict[
                 "reward_rate_optimizer"
             ]
-            init_class(TD_RC, "reward_centering", param_sweeper_dict)
+            param_sweeper_dict["reward_centering"] = init_class(TD_RC, "reward_centering", param_sweeper_dict)
         elif param_sweeper_dict["reward_centering:type"] == "MA":
-            init_class(MA_RC, "reward_centering", param_sweeper_dict)
+            param_sweeper_dict["reward_centering"] = init_class(MA_RC, "reward_centering", param_sweeper_dict)
         elif param_sweeper_dict["reward_centering:type"] == "RVI":
-            init_class(RVI_RC, "reward_centering", param_sweeper_dict)
+            param_sweeper_dict["reward_centering"] = init_class(RVI_RC, "reward_centering", param_sweeper_dict)
     """
     Initialize a policy learner
     """
