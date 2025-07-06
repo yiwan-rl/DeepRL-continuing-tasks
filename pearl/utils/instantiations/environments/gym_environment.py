@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 from pearl.api.action import Action
-from pearl.api.action_result import ActionResult
+
 from pearl.api.action_space import ActionSpace
 from pearl.api.environment import Environment
 from pearl.api.observation import Observation
@@ -114,9 +114,8 @@ class GymEnvironment(Environment):
             observation = observation.astype(np.float32)
         return observation, self.action_space
 
-    def step(self, action: Action) -> ActionResult:
-        """Takes one step in the environment given the agent's action. Returns an
-        `ActionResult` object containing the next observation, reward, and done flag."""
+    def step(self, action: Action):
+        """Takes one step in the environment given the agent's action. Returns a tuple containing the next observation, reward, and done flag."""
         # Convert action to the format expected by Gymnasium
         # Take a step in the environment and receive an action result
         gym_action_result = self.env.step(action)

@@ -7,11 +7,10 @@
 # pyre-strict
 
 from .residual_wrapper import ResidualWrapper
-from .value_networks import CNNValueNetwork, ValueNetwork, VanillaValueNetwork
+from .value_networks import CNNValueNetwork, VanillaValueNetwork
 
 __all__ = [
     "ResidualWrapper",
-    "ValueNetwork",
     "CNNValueNetwork",
     "VanillaValueNetwork",
 ]

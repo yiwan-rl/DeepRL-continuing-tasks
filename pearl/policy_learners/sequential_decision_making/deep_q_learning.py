@@ -11,9 +11,6 @@ from typing import Any, Optional
 
 import torch
 
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    QValueNetwork,
-)
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -23,6 +20,7 @@ from pearl.policy_learners.sequential_decision_making.deep_td_learning import (
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import optim
+from torch import nn
 from pearl.api.action_space import ActionSpace
 
 
@@ -34,7 +32,7 @@ class DeepQLearning(DeepTDLearning):
     def __init__(
         self,
         action_space: ActionSpace,
-        network_instance: QValueNetwork,
+        network_instance: nn.Module,
         optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
@@ -76,7 +74,7 @@ class DeepQLearning(DeepTDLearning):
                 `VanillaQValueNetwork`. This means that by default, an instance of the class
                 `VanillaQValueNetwork` (or the specified `network_type` class) is created and used
                 for learning.
-            network_instance (QValueNetwork, optional): A network instance to be used as the
+            network_instance (nn.Module): A network instance to be used as the
                 Q-value network. Defaults to None.
                 Note: This is an alternative to specifying a `network_type`. If provided, the
                 specified `network_type` is ignored and the input `network_instance` is used for

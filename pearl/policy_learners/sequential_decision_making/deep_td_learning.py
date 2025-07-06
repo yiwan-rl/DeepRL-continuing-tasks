@@ -16,10 +16,6 @@ from pearl.api.action import Action
 from pearl.api.action_space import ActionSpace
 from pearl.api.state import SubjectiveState
 from pearl.neural_networks.common.utils import update_target_network
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    QValueNetwork,
-)
-
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -29,6 +25,7 @@ from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC
 
 from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
 from torch import optim
+from torch import nn
 
 
 # TODO: Only support discrete action space problems for now and assumes Gym action space.
@@ -42,7 +39,7 @@ class DeepTDLearning(PolicyLearner):
     def __init__(
         self,
         action_space: ActionSpace,
-        network_instance: QValueNetwork,
+        network_instance: nn.Module,
         optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
@@ -85,7 +82,7 @@ class DeepTDLearning(PolicyLearner):
                 `VanillaQValueNetwork`. This means that by default, an instance of the class
                 `VanillaQValueNetwork` (or the specified `network_type` class) is created and used
                 for learning.
-            network_instance (QValueNetwork, optional): A network instance to be used as the
+            network_instance (nn.Module): A network instance to be used as the
                 Q-value network. Defaults to None.
                 Note: This is an alternative to specifying a `network_type`. If provided, the
                 specified `network_type` is ignored and the input `network_instance` is used for

@@ -14,13 +14,11 @@ import torch.nn as nn
 
 from pearl.neural_networks.common.utils import xavier_init_weights
 from pearl.neural_networks.common.value_networks import (
-    ValueNetwork,
     VanillaValueNetwork,
 )
 
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     EnsembleQValueNetwork,
-    QValueNetwork,
     VanillaQValueNetwork,
 )
 
@@ -39,7 +37,7 @@ def make_critic(
     state_dim: int,
     hidden_dims: Optional[List[int]],
     ensemble_critic_size: int,  # used only for ensemble critic
-    network_type: Union[Type[ValueNetwork], Type[QValueNetwork]],
+    network_type: Type[nn.Module],
     action_dim: Optional[int] = None,
 ) -> nn.Module:
     """
@@ -50,7 +48,7 @@ def make_critic(
         hidden_dims (Optional[Iterable[int]]): Hidden dimensions of the critic network.
         ensemble_critic_size: Number of critics.
             Used only when network_type is EnsembleQValueNetwork.
-        network_type (Union[Type[ValueNetwork], Type[QValueNetwork]]): The type of the critic
+        network_type (nn.Module): The type of the critic
             network to instantiate.
         action_dim (Optional[int]): The dimension of the action space.
 
@@ -62,7 +60,7 @@ def make_critic(
         assert hidden_dims is not None
         # cast network_type to get around static Pyre type checking; the runtime check with
         # `issubclass` ensures the network type is a sublcass of QValueNetwork
-        network_type = cast(Type[QValueNetwork], network_type)
+        network_type = cast(Type[nn.Module], network_type)
 
         return EnsembleQValueNetwork(
             state_dim=state_dim,

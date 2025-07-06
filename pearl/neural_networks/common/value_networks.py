@@ -26,16 +26,7 @@ from pearl.neural_networks.common.utils import (
 from torch import Tensor
 
 
-class ValueNetwork(nn.Module, ABC):
-    """
-    An interface for value neural networks.
-    It does not add any required methods to those already present in
-    its super classes.
-    Its purpose instead is just to serve as an umbrella type for all value networks.
-    """
-
-
-class VanillaValueNetwork(ValueNetwork):
+class VanillaValueNetwork(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -44,7 +35,7 @@ class VanillaValueNetwork(ValueNetwork):
         hidden_activation: str = "relu",
         **kwargs: Any,
     ) -> None:
-        super(VanillaValueNetwork, self).__init__()
+        super().__init__()
         self._model: nn.Module = mlp_block(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
@@ -63,7 +54,7 @@ class VanillaValueNetwork(ValueNetwork):
                 nn.init.xavier_normal_(layer.weight)
 
 
-class CNNValueNetwork(ValueNetwork):
+class CNNValueNetwork(nn.Module):
     """
     Vanilla CNN with a convolutional block followed by an mlp block.
     Args:
@@ -105,7 +96,7 @@ class CNNValueNetwork(ValueNetwork):
             == len(strides)
             == len(paddings)
         )
-        super(CNNValueNetwork, self).__init__()
+        super().__init__()
 
         self._input_channels = input_channels_count
         self._input_height = input_height

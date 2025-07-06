@@ -11,10 +11,8 @@ import math
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.neural_networks.common.value_networks import ValueNetwork
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     action_scaling,
-    ActorNetwork,
 )
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -43,8 +41,8 @@ class ProximalPolicyOptimization(ActorCriticBase):
     def __init__(
         self,
         action_space: ActionSpace,
-        actor_network_instance: ActorNetwork,
-        critic_network_instance: Union[ValueNetwork, nn.Module],
+        actor_network_instance: nn.Module,
+        critic_network_instance: nn.Module,
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,

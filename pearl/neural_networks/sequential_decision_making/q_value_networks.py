@@ -26,42 +26,8 @@ from pearl.neural_networks.common.utils import (
 from torch import nn, Tensor
 
 
-class QValueNetwork(abc.ABC, nn.Module):
-    """
-    An interface for state-action value (Q-value) estimators (typically, neural networks).
-    These are value neural networks with a special method
-    for computing the Q-value for a state-action pair.
-    """
 
-    @property
-    @abc.abstractmethod
-    def state_dim(self) -> int:
-        """Returns state dimention"""
-        ...
-
-    @property
-    @abc.abstractmethod
-    def action_dim(self) -> int:
-        """Returns action dimention"""
-        ...
-
-    @abc.abstractmethod
-    def get_q_values(
-        self,
-        state_batch: torch.Tensor,
-        action_batch: torch.Tensor,
-    ) -> torch.Tensor:
-        """Returns Q(s, a), given s and a
-        Args:
-            state_batch (torch.Tensor): a batch of state tensors (batch_size, state_dim)
-            action_batch (torch.Tensor): a batch of action tensors (batch_size, action_dim)
-        Returns:
-            Q-values of (state, action) pairs: (batch_size)
-        """
-        ...
-
-
-class VanillaQValueNetwork(QValueNetwork):
+class VanillaQValueNetwork(nn.Module):
     """
     A vanilla version of state-action value (Q-value) network.
     It leverages the vanilla implementation of value networks by
@@ -75,7 +41,7 @@ class VanillaQValueNetwork(QValueNetwork):
         hidden_dims: List[int],
         use_layer_norm: bool = False,
     ) -> None:
-        super(VanillaQValueNetwork, self).__init__()
+        super().__init__()
         self._state_dim: int = state_dim
         self._action_dim: int = action_dim
         self._model: nn.Module = mlp_block(
@@ -120,7 +86,7 @@ class VanillaQValueNetwork(QValueNetwork):
         return self._action_dim
 
 
-class VanillaQValueMultiHeadNetwork(QValueNetwork):
+class VanillaQValueMultiHeadNetwork(nn.Module):
     """
     A vanilla version of state-action value (Q-value) multi-head network.
     It leverages the vanilla implementation of value networks by
@@ -134,7 +100,7 @@ class VanillaQValueMultiHeadNetwork(QValueNetwork):
         hidden_dims: List[int],
         use_layer_norm: bool = False,
     ) -> None:
-        super(VanillaQValueMultiHeadNetwork, self).__init__()
+        super().__init__()
         self._state_dim: int = state_dim
         self._action_dim: int = action_dim
         self._model: nn.Module = mlp_block(
@@ -175,7 +141,7 @@ class VanillaQValueMultiHeadNetwork(QValueNetwork):
         return self._action_dim
 
 
-class EnsembleQValueNetwork(QValueNetwork):
+class EnsembleQValueNetwork(nn.Module):
     r"""A Q-value network that uses the `Ensemble` model."""
 
     def __init__(
@@ -183,7 +149,7 @@ class EnsembleQValueNetwork(QValueNetwork):
         models: List[nn.Module],
         ensemble_size: int,
     ) -> None:
-        super(EnsembleQValueNetwork, self).__init__()
+        super().__init__()
         self.models = models
         self.ensemble_size = ensemble_size
 
@@ -220,7 +186,7 @@ class EnsembleQValueNetwork(QValueNetwork):
         return self._action_dim
 
 
-class CNNQValueNetwork(QValueNetwork):
+class CNNQValueNetwork(nn.Module):
     """
     A CNN version of state-action value (Q-value) network.
     """
@@ -239,7 +205,7 @@ class CNNQValueNetwork(QValueNetwork):
         use_batch_norm_conv: bool = False,
         use_batch_norm_fully_connected: bool = False,
     ) -> None:
-        super(CNNQValueNetwork, self).__init__()
+        super().__init__()
 
         self._input_channels = input_channels_count
         self._input_height = input_height
@@ -323,7 +289,7 @@ class CNNQValueNetwork(QValueNetwork):
         return self._action_dim
 
 
-class CNNQValueMultiHeadNetwork(QValueNetwork):
+class CNNQValueMultiHeadNetwork(nn.Module):
     """
     A CNN version of state-action value (Q-value) network.
     """
@@ -342,7 +308,7 @@ class CNNQValueMultiHeadNetwork(QValueNetwork):
         use_batch_norm_conv: bool = False,
         use_batch_norm_fully_connected: bool = False,
     ) -> None:
-        super(CNNQValueMultiHeadNetwork, self).__init__()
+        super().__init__()
 
         self._input_channels = input_channels_count
         self._input_height = input_height

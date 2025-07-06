@@ -10,13 +10,7 @@
 from typing import Optional, Union
 
 import torch
-from pearl.neural_networks.sequential_decision_making.actor_networks import (
-    ActorNetwork,
-)
 
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    QValueNetwork,
-)
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
@@ -41,8 +35,8 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
     def __init__(
         self,
         action_space: ActionSpace,
-        actor_network_instance: ActorNetwork,
-        critic_network_instance: Union[QValueNetwork, nn.Module],
+        actor_network_instance: nn.Module,
+        critic_network_instance: nn.Module,
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,

@@ -7,17 +7,13 @@
 # pyre-strict
 
 from .actor_networks import (
-    ActorNetwork,
     GaussianActorNetwork,
     VanillaActorNetwork,
     VanillaContinuousActorNetwork,
 )
-from .q_value_networks import QValueNetwork
 
 __all__ = [
-    "ActorNetwork",
     "VanillaActorNetwork",
     "VanillaContinuousActorNetwork",
     "GaussianActorNetwork",
-    "QValueNetwork",
 ]

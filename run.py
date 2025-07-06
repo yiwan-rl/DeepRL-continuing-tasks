@@ -35,14 +35,9 @@ from pearl.neural_networks.common.utils import (
     orthogonal_init_weights,
     xavier_init_weights,
 )
-from pearl.neural_networks.common.value_networks import ValueNetwork
 from pearl.neural_networks.sequential_decision_making import (
     actor_networks,
     q_value_networks,
-)
-from pearl.neural_networks.sequential_decision_making.actor_networks import ActorNetwork
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    QValueNetwork,
 )
 from pearl.pearl_agent import PearlAgent
 from pearl.policy_learners import sequential_decision_making as policy_learners
@@ -1177,7 +1172,7 @@ if __name__ == "__main__":
         else:
             raise NotImplementedError
         param_sweeper_dict["network_instance:action_dim"] = env.action_space.action_dim
-        network_class: Type[QValueNetwork] = getattr(
+        network_class: Type[nn.Module] = getattr(
             q_value_networks, param_sweeper_dict["network_instance:type"]
         )
         param_sweeper_dict["network_instance"] = init_class(network_class, "network_instance", param_sweeper_dict)
@@ -1209,7 +1204,7 @@ if __name__ == "__main__":
             else train_env.action_space.n
         )
         param_sweeper_dict["actor_network_instance:action_space"] = env.action_space
-        actor_class: Type[ActorNetwork] = getattr(
+        actor_class: Type[nn.Module] = getattr(
             actor_networks, param_sweeper_dict["actor_network_instance:type"]
         )
         param_sweeper_dict["actor_network_instance"] = init_class(actor_class, "actor_network_instance", param_sweeper_dict)
@@ -1239,7 +1234,7 @@ if __name__ == "__main__":
         elif param_sweeper_dict["critic_network_instance:type"] in [
             "EnsembleQValueNetwork",
         ]:
-            list_of_member_networks: List[QValueNetwork] = []
+            list_of_member_networks: List[nn.Module] = []
             ensemble_size: int = param_sweeper_dict[
                 "critic_network_instance:ensemble_size"
             ]
@@ -1282,7 +1277,7 @@ if __name__ == "__main__":
                         filtered_dict[key[len(prefix) :]] = value
                 list_of_member_networks.append(member_network_class(**filtered_dict))
             models: nn.ModuleList = nn.ModuleList(list_of_member_networks)
-            critic_class: Type[QValueNetwork] = getattr(
+            critic_class: Type[nn.Module] = getattr(
                 q_value_networks, param_sweeper_dict["critic_network_instance:type"]
             )
             # pyre-fixme

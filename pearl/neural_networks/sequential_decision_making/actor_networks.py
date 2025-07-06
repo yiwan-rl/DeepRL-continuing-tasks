@@ -88,25 +88,7 @@ def noise_scaling(action_space: ActionSpace, input_noise: torch.Tensor) -> torch
     return scaled_noise
 
 
-class ActorNetwork(nn.Module):
-    """
-    An interface for actor networks.
-    IMPORTANT: the __init__ method specifies parameters for type-checking purposes only.
-    It does NOT store them in attributes.
-    Dealing with these parameters is left to subclasses.
-    """
-
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dims: Optional[List[int]],
-        output_dim: int,
-        action_space: Optional[ActionSpace] = None,
-    ) -> None:
-        super(ActorNetwork, self).__init__()
-
-
-class VanillaActorNetwork(ActorNetwork):
+class VanillaActorNetwork(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -125,9 +107,7 @@ class VanillaActorNetwork(ActorNetwork):
             output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
                         class)
         """
-        super(VanillaActorNetwork, self).__init__(
-            input_dim, hidden_dims, output_dim, action_space
-        )
+        super().__init__()
         self._model: nn.Module = mlp_block(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
@@ -220,7 +200,7 @@ class CNNActorNetwork(nn.Module):
             output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
                         class)
         """
-        super(CNNActorNetwork, self).__init__()
+        super().__init__()
         self._input_channels = input_channels_count
         self._input_height = input_height
         self._input_width = input_width
@@ -332,7 +312,7 @@ class CNNActorNetwork(nn.Module):
         )  # shape (batch_size, 1), (batch_size, 1)
 
 
-class VanillaContinuousActorNetwork(ActorNetwork):
+class VanillaContinuousActorNetwork(nn.Module):
     """
     This is vanilla version of deterministic actor network
     Given input state, output an action vector
@@ -347,9 +327,7 @@ class VanillaContinuousActorNetwork(ActorNetwork):
         output_dim: int,
         action_space: ActionSpace,
     ) -> None:
-        super(VanillaContinuousActorNetwork, self).__init__(
-            input_dim, hidden_dims, output_dim, action_space
-        )
+        super().__init__()
         self._model: nn.Module = mlp_block(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
@@ -374,7 +352,7 @@ class VanillaContinuousActorNetwork(ActorNetwork):
         return action
 
 
-class GaussianActorNetwork(ActorNetwork):
+class GaussianActorNetwork(nn.Module):
     """
     A multivariate gaussian actor network: parameterize the policy (action distirbution)
     as a multivariate gaussian. Given input state, the network outputs a pair of
@@ -406,9 +384,7 @@ class GaussianActorNetwork(ActorNetwork):
         hidden_activation: str = "relu",
         log_std_init_offset: float = 0.0,
     ) -> None:
-        super(GaussianActorNetwork, self).__init__(
-            input_dim, hidden_dims, output_dim, action_space
-        )
+        super().__init__()
         if len(hidden_dims) < 1:
             raise ValueError(
                 "The hidden dims cannot be empty for a gaussian actor network."
@@ -544,7 +520,7 @@ class GaussianActorNetwork(ActorNetwork):
         return log_prob
 
 
-class ClipGaussianActorNetwork(ActorNetwork):
+class ClipGaussianActorNetwork(nn.Module):
     """
     A multivariate gaussian actor network: parameterize the policy (action distirbution)
     as a multivariate gaussian. Given input state, the network outputs a pair of
@@ -575,9 +551,7 @@ class ClipGaussianActorNetwork(ActorNetwork):
         hidden_activation: str = "tanh",
         log_std_init_offset: float = 0.0,
     ) -> None:
-        super(ClipGaussianActorNetwork, self).__init__(
-            input_dim, hidden_dims, output_dim, action_space
-        )
+        super().__init__()
         if len(hidden_dims) < 1:
             raise ValueError(
                 "The hidden dims cannot be empty for a gaussian actor network."
