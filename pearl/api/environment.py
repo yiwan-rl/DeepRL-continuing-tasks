@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
 from pearl.api.action import Action
-from pearl.api.action_result import ActionResult
 from pearl.api.action_space import ActionSpace
 from pearl.api.observation import Observation
 

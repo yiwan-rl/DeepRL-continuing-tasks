@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 from typing import Tuple
 
 import numpy as np
-from pearl.api.action_result import ActionResult
 
 
 # taken from https://github.com/openai/gym/blob/master/gym/wrappers/normalize.py
@@ -66,7 +65,7 @@ def update_mean_var_count_from_moments(
 
 class Preprocessor(ABC):
     @abstractmethod
-    def process(self, action_result: ActionResult) -> None:
+    def process(self, obs, reward, terminated, truncated, info) -> None:
         pass
 
 

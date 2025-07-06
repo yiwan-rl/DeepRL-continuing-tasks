@@ -14,7 +14,6 @@ import numpy as np
 
 import torch
 from pearl.api.action import Action
-from pearl.api.agent import Agent
 from pearl.api.observation import Observation
 
 from pearl.policy_learners.policy_learner import PolicyLearner
@@ -28,7 +27,7 @@ from pearl.utils.device import get_pearl_device
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC
 
 
-class PearlAgent(Agent):
+class PearlAgent:
     """
     A Agent gathering the most common aspects of production-ready agents.
     It is meant as a catch-all agent whose functionality is defined by flags

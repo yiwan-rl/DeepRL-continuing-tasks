@@ -7,9 +7,7 @@
 # pyre-strict
 
 from .action import Action
-from .action_result import ActionResult
 from .action_space import ActionSpace
-from .agent import Agent
 from .environment import Environment
 from .observation import Observation
 from .reward import Reward
@@ -19,9 +17,7 @@ from .state import SubjectiveState
 
 __all__ = [
     "Action",
-    "ActionResult",
     "ActionSpace",
-    "Agent",
     "Environment",
     "Observation",
     "Reward",
