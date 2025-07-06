@@ -78,6 +78,7 @@ from pearl.replay_buffers import (
     ReplayBuffer,
     sequential_decision_making as replay_buffers,
 )
+import torchopt
 from concurrent.futures import ThreadPoolExecutor
 
 from pearl.user_envs.wrappers import (
@@ -103,7 +104,7 @@ from pearl.utils.functional_utils.learning.preprocessing import (
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
 from pearl.utils.instantiations.environments.gym_environment import GymEnvironment
-from pearl.utils.instantiations.spaces import BoxActionSpace, DiscreteActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace, VectorDiscreteSpace
 
 logging.basicConfig(level=logging.INFO)
 logger: logging.Logger = logging.getLogger(__name__)
@@ -121,11 +122,14 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
 
 
+def get_pearl_env(env_configs: List[Dict[str, Any]], batched: bool = True, num_processes: int = 2) -> GymEnvironment:
+    env_fns = [lambda cfg=cfg: get_env(cfg) for cfg in env_configs]  # capture cfg by default arg
+    return GymEnvironment(env_fns, batched=batched, num_processes=num_processes)
+
 def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
     """
     attach a versatility wrapper to the environment
     """
-    env_config = env_config[0]
     env=get_gym_env(env_config)
 
     if env_config.get("random_reset_wrapper", False):
@@ -161,7 +165,7 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
             env=env,
         )
 
-    return GymEnvironment(env)
+    return env
 
 
 def env_supports_termination_when_unhealthy(env_name: str) -> bool:
@@ -724,15 +728,15 @@ def train_continuing(
     }
 
     # variables used in the training loop but not recorded
-    cum_reward = 0
-    cum_reset = 0
-    cum_clipped_reward = 0
-    last_cum_reward_print = 0
-    last_cum_reward_record = 0
-    last_cum_reset_print = 0
-    last_cum_reset_record = 0
-    last_cum_clipped_reward_print = 0
-    last_cum_clipped_reward_record = 0
+    cum_reward = np.zeros(train_env.num_envs)
+    cum_reset = np.zeros(train_env.num_envs)
+    cum_clipped_reward = np.zeros(train_env.num_envs)
+    last_cum_reward_print = np.zeros(train_env.num_envs)
+    last_cum_reward_record = np.zeros(train_env.num_envs)
+    last_cum_reset_print = np.zeros(train_env.num_envs)
+    last_cum_reset_record = np.zeros(train_env.num_envs)
+    last_cum_clipped_reward_print = np.zeros(train_env.num_envs)
+    last_cum_clipped_reward_record = np.zeros(train_env.num_envs)
     learning_report_cache = {}
     last_timed_steps = 0
     steps = 0
@@ -770,7 +774,7 @@ def train_continuing(
             for preprocessor in preprocessors:
                 observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
             clipped_reward = reward
-            num_resets = info.get("num_resets", 0)
+            num_resets = sum([i.get("num_resets", 0) for i in info])
 
             steps += 1
 
@@ -1037,16 +1041,17 @@ if __name__ == "__main__":
             continue
         if args.render:
             param_sweeper_dict[envs_configs[i]][0]["render_mode"] = "rgb_array"
-            env = get_env(param_sweeper_dict[envs_configs[i]])
+            env = get_pearl_env(param_sweeper_dict[envs_configs[i]])
         else:
-            env = get_env(param_sweeper_dict[envs_configs[i]])
-        env.action_space._gym_space.seed(seed=run_id)
+            env = get_pearl_env(param_sweeper_dict[envs_configs[i]])
         env.reset(seed=run_id)
         envs.append(env)
         if i == 1 or i == 2:
             # make sure the three environments have the same size of state and action spaces
-            assert envs[0].observation_space.shape == envs[i].observation_space.shape
-            assert envs[0].action_space.shape == envs[i].action_space.shape
+            assert envs[0].observation_space.num_elements() == envs[i].observation_space.num_elements()
+            assert envs[0].action_space.num_elements() == envs[i].action_space.num_elements()
+            assert envs[0].observation_space.element_dim() == envs[i].observation_space.element_dim()
+            assert envs[0].action_space.element_dim() == envs[i].action_space.element_dim()
 
     # pyre-fixme
     train_env: GymEnvironment = envs[0]  # training environment
@@ -1086,7 +1091,7 @@ if __name__ == "__main__":
             param_sweeper_dict["exploration_module:std_dev"], list
         ):
             # if std_dev is specified and has two values, the first value is the noise for all dimensions, except the last dimension, and the second value is the noise for the last dimension
-            assert isinstance(env.action_space, BoxActionSpace)
+            assert isinstance(env.action_space, VectorBoxSpace)
             assert len(param_sweeper_dict["exploration_module:std_dev"]) == 2
             tmp: torch.Tensor = (
                 torch.ones(
@@ -1120,7 +1125,7 @@ if __name__ == "__main__":
     if "actor_update_noise" in param_sweeper_dict and isinstance(
         param_sweeper_dict["actor_update_noise"], list
     ):
-        assert isinstance(env.action_space, BoxActionSpace)
+        assert isinstance(env.action_space, VectorBoxSpace)
         assert len(param_sweeper_dict["actor_update_noise"]) == 2
         tmp = (
             torch.ones(
@@ -1193,28 +1198,42 @@ if __name__ == "__main__":
             "GaussianActorNetwork",
             "ClipGaussianActorNetwork",
         ]:
-            param_sweeper_dict["actor_network_instance:input_dim"] = (
-                env.observation_space.shape[0]
-            )
+            param_sweeper_dict["actor_network_instance:input_dim"] = env.observation_space.element_dim()
         else:
             raise NotImplementedError
         param_sweeper_dict["actor_network_instance:output_dim"] = (
-            train_env.action_space.action_dim
-            if isinstance(train_env.action_space, BoxActionSpace)
+            train_env.action_space.element_dim()
+            if isinstance(train_env.action_space, VectorBoxSpace)
             else train_env.action_space.n
         )
-        param_sweeper_dict["actor_network_instance:action_space"] = env.action_space
+        param_sweeper_dict["actor_network_instance:output_dim"] = env.action_space.element_dim()
         actor_class: Type[nn.Module] = getattr(
             actor_networks, param_sweeper_dict["actor_network_instance:type"]
         )
+        actor_network_instances = []
+        for i in range(len(param_sweeper_dict["env"])):
+            actor_network_instances.append(init_class(actor_class, "actor_network_instance", param_sweeper_dict))
+        param_sweeper_dict["actor_network_instances"] = nn.ModuleList(actor_network_instances)
         param_sweeper_dict["actor_network_instance"] = init_class(actor_class, "actor_network_instance", param_sweeper_dict)
 
     if "critic_network_instance:type" in param_sweeper_dict:
         # if critic network is specified, intialize one
         if param_sweeper_dict["critic_network_instance:type"] in [
+            "VanillaQValueNetwork",
+        ]:
+            critic_class: Type[nn.Module] = getattr(
+                q_value_networks, param_sweeper_dict["critic_network_instance:type"]
+            )
+            param_sweeper_dict["critic_network_instance:state_dim"] = (
+                env.observation_space.element_dim()
+            )
+            param_sweeper_dict["critic_network_instance:action_dim"] = (
+                env.action_space.element_dim()
+            )
+        elif param_sweeper_dict["critic_network_instance:type"] in [
             "VanillaValueNetwork",
         ]:
-            critic_class: Type[ValueNetwork] = getattr(
+            critic_class: Type[nn.Module] = getattr(
                 value_networks, param_sweeper_dict["critic_network_instance:type"]
             )
             param_sweeper_dict["critic_network_instance:input_dim"] = (
@@ -1255,7 +1274,7 @@ if __name__ == "__main__":
                     # vector based inputs
                     assert len(env.observation_space.shape) == 1
                     param_sweeper_dict["critic_member_network:state_dim"] = (
-                        env.observation_space.shape[0]
+                        env.observation_space.element_dim()
                     )
                 else:
                     raise NotImplementedError
@@ -1286,6 +1305,8 @@ if __name__ == "__main__":
             )
         else:
             raise NotImplementedError
+        critic_network_instances = nn.ModuleList([init_class(critic_class, "critic_network_instance", param_sweeper_dict) for _ in range(len(param_sweeper_dict["env"]))])
+        param_sweeper_dict["critic_network_instances"] = critic_network_instances
 
     if param_sweeper_dict.get("reward_centering:type", None) is not None:
         if param_sweeper_dict["reward_centering:type"] == "TD":
@@ -1326,60 +1347,66 @@ if __name__ == "__main__":
         "ALE/" in training_env_name or "NoFrameskip" in training_env_name
     ):
         sac_atari_init_network(param_sweeper_dict)
+    """TODO: fix this"""
+    # """
+    # Initialize optimizers
+    # """
 
-    """
-    Initialize optimizers
-    """
+    # if "optimizer:type" in param_sweeper_dict:
+    #     assert "network_instance" in param_sweeper_dict
+    #     optimizer_class: Type[torch.optim.Optimizer] = getattr(
+    #         torch.optim, param_sweeper_dict["optimizer:type"]
+    #     )
+    #     param_sweeper_dict["optimizer:params"] = param_sweeper_dict[
+    #         "network_instance"
+    #     ].parameters()
+    #     param_sweeper_dict["optimizer"] = init_class(optimizer_class, "optimizer", param_sweeper_dict)
 
-    if "optimizer:type" in param_sweeper_dict:
-        assert "network_instance" in param_sweeper_dict
-        optimizer_class: Type[torch.optim.Optimizer] = getattr(
-            torch.optim, param_sweeper_dict["optimizer:type"]
-        )
-        param_sweeper_dict["optimizer:params"] = param_sweeper_dict[
-            "network_instance"
-        ].parameters()
-        param_sweeper_dict["optimizer"] = init_class(optimizer_class, "optimizer", param_sweeper_dict)
+    # if "actor_optimizer:type" in param_sweeper_dict:
+    #     assert "actor_network_instance" in param_sweeper_dict
+    #     actor_optimizer_class: Type[torch.optim.Optimizer] = getattr(
+    #         torch.optim, param_sweeper_dict["actor_optimizer:type"]
+    #     )
+    #     param_sweeper_dict["actor_optimizer:params"] = param_sweeper_dict[
+    #         "actor_network_instance"
+    #     ].parameters()
+    #     param_sweeper_dict["actor_optimizer"] = init_class(actor_optimizer_class, "actor_optimizer", param_sweeper_dict)
 
-    if "actor_optimizer:type" in param_sweeper_dict:
-        assert "actor_network_instance" in param_sweeper_dict
-        actor_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-            torch.optim, param_sweeper_dict["actor_optimizer:type"]
-        )
-        param_sweeper_dict["actor_optimizer:params"] = param_sweeper_dict[
-            "actor_network_instance"
-        ].parameters()
-        param_sweeper_dict["actor_optimizer"] = init_class(actor_optimizer_class, "actor_optimizer", param_sweeper_dict)
+    # if "critic_optimizer:type" in param_sweeper_dict:
+    #     assert "critic_network_instance" in param_sweeper_dict
+    #     critic_optimizer_class: Type[torch.optim.Optimizer] = getattr(
+    #         torch.optim, param_sweeper_dict["critic_optimizer:type"]
+    #     )
+    #     param_sweeper_dict["critic_optimizer:params"] = param_sweeper_dict[
+    #         "critic_network_instance"
+    #     ].parameters()
+    #     param_sweeper_dict["critic_optimizer"] = init_class(critic_optimizer_class, "critic_optimizer", param_sweeper_dict)
 
-    if "critic_optimizer:type" in param_sweeper_dict:
-        assert "critic_network_instance" in param_sweeper_dict
-        critic_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-            torch.optim, param_sweeper_dict["critic_optimizer:type"]
-        )
-        param_sweeper_dict["critic_optimizer:params"] = param_sweeper_dict[
-            "critic_network_instance"
-        ].parameters()
-        param_sweeper_dict["critic_optimizer"] = init_class(critic_optimizer_class, "critic_optimizer", param_sweeper_dict)
+    # if param_sweeper_dict.get("reward_centering:type", None) is not None:
+    #     if param_sweeper_dict["reward_centering:type"] == "TD":
+    #         reward_rate_optimizer_class: Type[torch.optim.Optimizer] = getattr(
+    #             torch.optim, param_sweeper_dict["reward_rate_optimizer:type"]
+    #         )
+    #         param_sweeper_dict["reward_rate_optimizer:params"] = [
+    #             param_sweeper_dict["reward_rate"]
+    #         ]
+    #         param_sweeper_dict["reward_rate_optimizer"] = init_class(
+    #             reward_rate_optimizer_class, "reward_rate_optimizer", param_sweeper_dict
+    #         )
+    #         param_sweeper_dict["reward_centering:optimizer"] = param_sweeper_dict[
+    #             "reward_rate_optimizer"
+    #         ]
+    #         param_sweeper_dict["reward_centering"] = init_class(TD_RC, "reward_centering", param_sweeper_dict)
+    #     elif param_sweeper_dict["reward_centering:type"] == "MA":
+    #         param_sweeper_dict["reward_centering"] = init_class(MA_RC, "reward_centering", param_sweeper_dict)
+    #     elif param_sweeper_dict["reward_centering:type"] == "RVI":
+    #         param_sweeper_dict["reward_centering"] = init_class(RVI_RC, "reward_centering", param_sweeper_dict)
 
-    if param_sweeper_dict.get("reward_centering:type", None) is not None:
-        if param_sweeper_dict["reward_centering:type"] == "TD":
-            reward_rate_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-                torch.optim, param_sweeper_dict["reward_rate_optimizer:type"]
-            )
-            param_sweeper_dict["reward_rate_optimizer:params"] = [
-                param_sweeper_dict["reward_rate"]
-            ]
-            param_sweeper_dict["reward_rate_optimizer"] = init_class(
-                reward_rate_optimizer_class, "reward_rate_optimizer", param_sweeper_dict
-            )
-            param_sweeper_dict["reward_centering:optimizer"] = param_sweeper_dict[
-                "reward_rate_optimizer"
-            ]
-            param_sweeper_dict["reward_centering"] = init_class(TD_RC, "reward_centering", param_sweeper_dict)
-        elif param_sweeper_dict["reward_centering:type"] == "MA":
-            param_sweeper_dict["reward_centering"] = init_class(MA_RC, "reward_centering", param_sweeper_dict)
-        elif param_sweeper_dict["reward_centering:type"] == "RVI":
-            param_sweeper_dict["reward_centering"] = init_class(RVI_RC, "reward_centering", param_sweeper_dict)
+    # ---------------------
+    # Optimizer setup
+    # ---------------------
+    param_sweeper_dict["actor_optimizer"] = torchopt.adam(lr=param_sweeper_dict["actor_optimizer:lr"])
+    param_sweeper_dict["critic_optimizer"] = torchopt.adam(lr=param_sweeper_dict["critic_optimizer:lr"])
     """
     Initialize a policy learner
     """
@@ -1481,9 +1508,12 @@ if __name__ == "__main__":
                 preprocessors=param_sweeper_dict["preprocessors"],
             )
     else:
+        """TODO: fix this"""
         # create two copies of the agent, one for continuing and one for episodic evaluation
-        eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
-        eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+        # eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+        # eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+        eval_continuing_agent: PearlAgent = train_agent
+        eval_episodic_agent: PearlAgent = train_agent
 
         if param_sweeper_dict.get(
             "train_env_is_continuing", False

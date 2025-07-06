@@ -12,7 +12,7 @@ from typing import Optional
 import torch
 
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
 from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.common.score_exploration_base import (
     ScoreExplorationBase,
@@ -29,7 +29,7 @@ class NoExploration(ScoreExplorationBase):
     def get_scores(
         self,
         subjective_state: SubjectiveState,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace | VectorBoxSpace,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
         representation: Optional[torch.nn.Module] = None,

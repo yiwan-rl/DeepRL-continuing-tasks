@@ -17,19 +17,17 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from pearl.api.action_space import ActionSpace
 from pearl.neural_networks.common.utils import (
     compute_output_dim_model_cnn,
     conv_block,
     mlp_block,
 )
-from pearl.utils.instantiations.spaces.box_action import BoxActionSpace
 from torch import Tensor
 from torch.distributions import Normal
 
 
 def action_scaling(
-    action_space: ActionSpace, input_action: torch.Tensor
+    action_space_low: torch.Tensor, action_space_high: torch.Tensor, input_action: torch.Tensor
 ) -> torch.Tensor:
     """
     Center and scale input action from [-1, 1]^{action_dim} to [low, high]^{action_dim}.
@@ -40,34 +38,25 @@ def action_scaling(
     Note: the action space is not assumed to be symmetric (low = -high).
 
     Args:
-        action_space: the action space
         input_action: the input action vector to be scaled
     Returns:
         scaled_action: centered and scaled input action vector, according to the action space
     """
-    assert isinstance(action_space, BoxActionSpace)
-    device = input_action.device
-    low = action_space.low.clone().detach().to(device)
-    high = action_space.high.clone().detach().to(device)
-    centered_and_scaled_action = (((high - low) * (input_action + 1.0)) / 2) + low
+    centered_and_scaled_action = (((action_space_high - action_space_low) * (input_action + 1.0)) / 2) + action_space_low
     return centered_and_scaled_action
 
 
 def action_unscaling(
-    action_space: ActionSpace, input_action: torch.Tensor
+    action_space_low: torch.Tensor, action_space_high: torch.Tensor, input_action: torch.Tensor
 ) -> torch.Tensor:
     """
     The reverse operation of action_scaling
     """
-    assert isinstance(action_space, BoxActionSpace)
-    device = input_action.device
-    low = action_space.low.clone().detach().to(device)
-    high = action_space.high.clone().detach().to(device)
-    unscaled_action = (((input_action - low) / (high - low)) * 2) - 1
+    unscaled_action = (((input_action - action_space_low) / (action_space_high - action_space_low)) * 2.0) - 1.0
     return unscaled_action
 
 
-def noise_scaling(action_space: ActionSpace, input_noise: torch.Tensor) -> torch.Tensor:
+def noise_scaling(action_space_low: torch.Tensor, action_space_high: torch.Tensor, input_noise: torch.Tensor) -> torch.Tensor:
     """
     This function rescales any input vector from [-1, 1]^{action_dim} to [low, high]^{action_dim}.
     Use case:
@@ -75,16 +64,13 @@ def noise_scaling(action_space: ActionSpace, input_noise: torch.Tensor) -> torch
             normal distribution) according to the action space.
 
     Args:
-        action_space: the action space
+        action_space_low: the action space low
+        action_space_high: the action space high
         input_vector: the input vector to be scaled
     Returns:
         torch.Tensor: scaled input vector, according to the action space
     """
-    assert isinstance(action_space, BoxActionSpace)
-    device = input_noise.device
-    low = action_space.low.clone().to(device)
-    high = action_space.high.clone().to(device)
-    scaled_noise = ((high - low) / 2) * input_noise
+    scaled_noise = ((action_space_high - action_space_low) / 2) * input_noise
     return scaled_noise
 
 
@@ -94,7 +80,6 @@ class VanillaActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: Optional[List[int]],
         output_dim: int,
-        action_space: Optional[ActionSpace] = None,
         hidden_activation: str = "relu",
     ) -> None:
         """A Vanilla Actor Network is meant to be used with discrete action spaces.
@@ -104,8 +89,7 @@ class VanillaActorNetwork(nn.Module):
         Args:
             input_dim: input state dimension (or dim of the state representation)
             hidden_dims: list of hidden layer dimensions
-            output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
-                        class)
+            output_dim: number of actions (action_space.n when used with discrete action space)
         """
         super().__init__()
         self._model: nn.Module = mlp_block(
@@ -122,6 +106,7 @@ class VanillaActorNetwork(nn.Module):
     def get_policy_distribution(
         self,
         state_batch: torch.Tensor,
+        params,
     ) -> torch.Tensor:
         """
         Gets a policy distribution from a discrete actor network.
@@ -135,8 +120,8 @@ class VanillaActorNetwork(nn.Module):
             reshape_state_batch = True
         else:
             reshape_state_batch = False
-        policy_distribution = self.forward(
-            state_batch
+        policy_distribution = torch.func.functional_call(
+            self, params, (state_batch)
         )  # shape (batch_size, num_actions)
         if reshape_state_batch:
             policy_distribution = policy_distribution.squeeze(0)
@@ -146,6 +131,7 @@ class VanillaActorNetwork(nn.Module):
         self,
         state_batch: torch.Tensor,
         action_batch: torch.Tensor,
+        params,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Gets probabilities of different actions from a discrete actor network.
@@ -159,7 +145,7 @@ class VanillaActorNetwork(nn.Module):
             action_log_probs: probabilities of each action in the batch with shape (batch_size)
             entropy: entropy of the policy distribution with shape (batch_size)
         """
-        all_action_probs = self.forward(state_batch)  # shape: (batch_size, output_dim)
+        all_action_probs = torch.func.functional_call(self, params, (state_batch))  # shape: (batch_size, output_dim)
 
         log_all_action_probs = torch.log(all_action_probs + 1e-8)
         log_action_probs = torch.sum(
@@ -188,7 +174,6 @@ class CNNActorNetwork(nn.Module):
         output_dim: int = 1,
         use_batch_norm_conv: bool = False,
         use_batch_norm_fully_connected: bool = False,
-        action_space: Optional[ActionSpace] = None,
     ) -> None:
         """A CNN Actor Network is meant to be used with CNN to deal with images.
            For an input state (batch of states), it outputs a probability distribution over
@@ -197,8 +182,7 @@ class CNNActorNetwork(nn.Module):
         Args:
             input_dim: input state dimension (or dim of the state representation)
             hidden_dims: list of hidden layer dimensions
-            output_dim: number of actions (action_space.n when used with the DiscreteActionSpace
-                        class)
+            output_dim: number of actions (action_space.n when used with discrete action space)
         """
         super().__init__()
         self._input_channels = input_channels_count
@@ -325,7 +309,6 @@ class VanillaContinuousActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: Optional[List[int]],
         output_dim: int,
-        action_space: ActionSpace,
     ) -> None:
         super().__init__()
         self._model: nn.Module = mlp_block(
@@ -334,12 +317,11 @@ class VanillaContinuousActorNetwork(nn.Module):
             output_dim=output_dim,
             last_activation="tanh",
         )
-        self._action_space = action_space
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self._model(x)
 
-    def sample_action(self, x: torch.Tensor) -> torch.Tensor:
+    def sample_action(self, x: torch.Tensor, params, action_space_low: torch.Tensor, action_space_high: torch.Tensor) -> torch.Tensor:
         """
         Sample an action from the actor network.
         Args:
@@ -347,8 +329,8 @@ class VanillaContinuousActorNetwork(nn.Module):
         Returns:
             action: sampled action, scaled to the action space bounds
         """
-        normalized_action = self._model(x)
-        action = action_scaling(self._action_space, normalized_action)
+        normalized_action = torch.func.functional_call(self, params, (x))
+        action = action_scaling(action_space_low, action_space_high, normalized_action)
         return action
 
 
@@ -365,7 +347,6 @@ class GaussianActorNetwork(nn.Module):
         input_dim: input state dimension
         hidden_dims: list of hidden layer dimensions; cannot pass an empty list
         output_dim: action dimension
-        action_space: action space
         state_conditioned_std: if True,
             the standard deviation shares the same network body with the mean,
             otherwise it is a set of k trainable parameters, where k is the number of actions
@@ -379,7 +360,6 @@ class GaussianActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: List[int],
         output_dim: int,
-        action_space: ActionSpace,
         state_conditioned_std: bool = True,
         hidden_activation: str = "relu",
         log_std_init_offset: float = 0.0,
@@ -406,14 +386,6 @@ class GaussianActorNetwork(nn.Module):
                 torch.zeros(output_dim) + log_std_init_offset
             )
 
-        self._action_space = action_space
-        # check this for multi-dimensional spaces
-        assert isinstance(action_space, BoxActionSpace)
-        self.register_buffer(
-            "_action_bound",
-            (action_space.high.clone().detach() - action_space.low.clone().detach())
-            / 2,
-        )
 
         # preventing the actor network from learning a flat or a point mass distribution
         self._log_std_min = -5
@@ -437,7 +409,12 @@ class GaussianActorNetwork(nn.Module):
         return mean, log_std
 
     def sample_action(
-        self, state_batch: Tensor, get_log_prob: bool = False
+        self, 
+        state_batch: Tensor, 
+        params, 
+        action_space_low: torch.Tensor, 
+        action_space_high: torch.Tensor, 
+        get_log_prob: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Sample an action from the actor network.
@@ -450,7 +427,7 @@ class GaussianActorNetwork(nn.Module):
             action: Sampled action, scaled to the action space bounds.
             log_prob [Optional]: log probability of the sampled action.
         """
-        mean, log_std = self.forward(state_batch)
+        mean, log_std = torch.func.functional_call(self, params, (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
         sample = normal.rsample()  # reparameterization trick
@@ -460,7 +437,7 @@ class GaussianActorNetwork(nn.Module):
 
         # clamp each action dimension to prevent numerical issues in tanh
         # normalized_action.clamp(-1 + epsilon, 1 - epsilon)
-        action = action_scaling(self._action_space, normalized_action)
+        action = action_scaling(action_space_low, action_space_high, normalized_action)
         if get_log_prob:
             log_prob = self._get_log_prob_normal(normal, sample, normalized_action)
             return action, log_prob
@@ -468,7 +445,7 @@ class GaussianActorNetwork(nn.Module):
             return action
 
     def get_action_log_prob_and_entropy(
-        self, state_batch: torch.Tensor, action_batch: torch.Tensor
+        self, state_batch: torch.Tensor, action_batch: torch.Tensor, params, action_space_low: torch.Tensor, action_space_high: torch.Tensor
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute log probability of actions, pi(a|s) under the policy parameterized by
@@ -480,21 +457,22 @@ class GaussianActorNetwork(nn.Module):
             log_prob: log probability of each action in the batch
         """
         epsilon = 1e-6
-        mean, log_std = self.forward(state_batch)
+        mean, log_std = torch.func.functional_call(self, params, (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
 
         normalized_action_batch = torch.clip(
             # rescales from [low, high]^{action_dim} to [-1, 1]^{action_dim}.
-            action_unscaling(self._action_space, action_batch),
+            action_unscaling(action_space_low, action_space_high, action_batch),
             -1 + epsilon,
             1 - epsilon,
         )
 
         # transform actions from [-1, 1]^d to [-inf, inf]^d
         unnormalized_action_batch = torch.atanh(normalized_action_batch)
+        action_bound = (action_space_high - action_space_low) / 2
         log_prob = self._get_log_prob_normal(
-            normal, unnormalized_action_batch, normalized_action_batch
+            normal, unnormalized_action_batch, normalized_action_batch, action_bound
         )
 
         return log_prob, normal.entropy().view(
@@ -506,10 +484,11 @@ class GaussianActorNetwork(nn.Module):
         normal_dist: torch.distributions.Distribution,
         unnormalized_action_batch: Tensor,
         normalized_action_batch: Tensor,
+        action_bound: torch.Tensor,
     ) -> Tensor:
         log_prob = normal_dist.log_prob(unnormalized_action_batch)
         log_prob -= torch.log(
-            self._action_bound * (1 - normalized_action_batch.pow(2)) + 1e-6
+            action_bound * (1 - normalized_action_batch.pow(2)) + 1e-6
         )
 
         # for multi-dimensional action space, sum log probabilities over individual
@@ -533,7 +512,6 @@ class ClipGaussianActorNetwork(nn.Module):
         input_dim: input state dimension
         hidden_dims: list of hidden layer dimensions; cannot pass an empty list
         output_dim: action dimension
-        action_space: action space
         state_conditioned_std: if True,
             the standard deviation shares the same network body with the mean,
             otherwise it is a set of k trainable parameters, where k is the number of actions
@@ -547,7 +525,6 @@ class ClipGaussianActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: List[int],
         output_dim: int,
-        action_space: ActionSpace,
         hidden_activation: str = "tanh",
         log_std_init_offset: float = 0.0,
     ) -> None:
@@ -576,7 +553,7 @@ class ClipGaussianActorNetwork(nn.Module):
         return mean, log_std
 
     def sample_action(
-        self, state_batch: Tensor, get_log_prob: bool = False
+        self, state_batch: Tensor, params, get_log_prob: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Sample an action from the actor network.
@@ -589,7 +566,7 @@ class ClipGaussianActorNetwork(nn.Module):
             action: Sampled action, scaled to the action space bounds.
             log_prob [Optional]: log probability of the sampled action.
         """
-        mean, log_std = self.forward(state_batch)
+        mean, log_std = torch.func.functional_call(self, params, (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
         action = normal.sample()  # reparameterization trick
@@ -601,7 +578,7 @@ class ClipGaussianActorNetwork(nn.Module):
             return action
 
     def get_action_log_prob_and_entropy(
-        self, state_batch: torch.Tensor, action_batch: torch.Tensor
+        self, state_batch: torch.Tensor, action_batch: torch.Tensor, params
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute log probability of actions, pi(a|s) under the policy parameterized by
@@ -612,7 +589,7 @@ class ClipGaussianActorNetwork(nn.Module):
         Returns:
             log_prob: log probability of each action in the batch
         """
-        mean, log_std = self.forward(state_batch)
+        mean, log_std = torch.func.functional_call(self, params, (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
         log_prob = normal.log_prob(action_batch)

@@ -14,7 +14,7 @@ from warnings import warn
 import torch
 
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -40,7 +40,7 @@ class ScoreExplorationBase(ExplorationModule):
     def act(
         self,
         subjective_state: SubjectiveState,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace,
         values: Optional[torch.Tensor] = None,
         action_availability_mask: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
@@ -94,7 +94,7 @@ class ScoreExplorationBase(ExplorationModule):
     def get_scores(
         self,
         subjective_state: SubjectiveState,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace,
         values: torch.Tensor,
         exploit_action: Optional[Action] = None,
         representation: Optional[torch.nn.Module] = None,

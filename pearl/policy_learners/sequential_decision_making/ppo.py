@@ -29,7 +29,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.preprocessing import RunningMeanStd
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
 
 
 class ProximalPolicyOptimization(ActorCriticBase):
@@ -40,9 +40,9 @@ class ProximalPolicyOptimization(ActorCriticBase):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        actor_network_instance: nn.Module,
-        critic_network_instance: nn.Module,
+        action_space: VectorDiscreteSpace | VectorBoxSpace,
+        actor_network_instances: nn.ModuleList,
+        critic_network_instances: nn.ModuleList,
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
@@ -76,8 +76,8 @@ class ProximalPolicyOptimization(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=is_action_continuous,
-            actor_network_instance=actor_network_instance,
-            critic_network_instance=critic_network_instance,
+            actor_network_instances=actor_network_instances,
+            critic_network_instances=critic_network_instances,
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
             reward_rate=reward_rate,
@@ -336,7 +336,7 @@ class ProximalPolicyOptimization(ActorCriticBase):
         """
         if self._is_action_continuous:
             action = torch.clamp(action, min=-1.0, max=1.0)
-            action = action_scaling(self._action_space, action)
+            action = action_scaling(self.action_space.low, self.action_space.high, action)
         return action
 
     def compute_f_value(self, batch: TransitionBatch) -> torch.Tensor:

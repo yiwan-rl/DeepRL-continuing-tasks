@@ -191,6 +191,14 @@ def update_target_network(
         target_param.data.copy_(new_param)
 
 
+def update_target_params(
+    target_params: List[torch.Tensor], source_params: List[torch.Tensor], tau: float
+) -> None:
+    for k, v in target_params.items():
+        new_param = tau * source_params[k].data + (1.0 - tau) * v.data
+        v.data.copy_(new_param)
+
+
 def compute_output_dim_model_cnn(
     input_channels: int, input_width: int, input_height: int, model_cnn: nn.Module
 ) -> int:

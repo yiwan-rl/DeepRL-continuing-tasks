@@ -9,15 +9,15 @@
 
 import copy
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Union
-
+from typing import Any, Dict, Optional, Union, List
+import torchopt
 import torch
 
 from pearl.api.action import Action
 
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
 from pearl.api.state import SubjectiveState
-from pearl.neural_networks.common.utils import update_target_network
+from pearl.neural_networks.common.utils import update_target_params
 
 
 
@@ -27,9 +27,10 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
 from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
+from pearl.utils.instantiations.spaces.discrete import VectorDiscreteSpace
+from pearl.utils.instantiations.spaces.box import VectorBoxSpace
 from torch import nn, optim
-
+from torch import vmap
 
 class ActorCriticBase(PolicyLearner):
     """
@@ -45,11 +46,11 @@ class ActorCriticBase(PolicyLearner):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        actor_network_instance: nn.Module,
-        critic_network_instance: nn.Module,
-        actor_optimizer: optim.Optimizer,
-        critic_optimizer: optim.Optimizer,
+        action_space: VectorDiscreteSpace | VectorBoxSpace,
+        actor_network_instances: nn.ModuleList,
+        critic_network_instances: nn.ModuleList,
+        actor_optimizer,
+        critic_optimizer,
         exploration_module: ExplorationModule,
         use_actor_target: bool = False,
         use_critic_target: bool = False,
@@ -81,25 +82,36 @@ class ActorCriticBase(PolicyLearner):
         self._use_actor_target = use_actor_target
         self._use_critic_target = use_critic_target
 
-        self._actor: nn.Module = actor_network_instance
-        self._actor_optimizer: optim.Optimizer = actor_optimizer
+        self._actor: nn.Module = actor_network_instances[0]
+        actor_param_list = [dict(actor_network_instance.named_parameters()) for actor_network_instance in actor_network_instances]
+        self._actor_params = {
+            k: torch.stack([params[k] for params in actor_param_list], dim=0)
+            for k in actor_param_list[0]
+        }
+        self._actor_optimizer = actor_optimizer
+        self._actor_optimizer_state = self._actor_optimizer.init(self._actor_params)
         self._actor_target_update_freq = actor_target_update_freq
         self._actor_soft_update_tau = actor_soft_update_tau
 
         # make a copy of the actor network to be used as the actor target network
         if self._use_actor_target:
-            self._actor_target: nn.Module = copy.deepcopy(self._actor)
+            self._actor_target_params = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._actor_params)
+
 
         self._critic_target_update_freq = critic_target_update_freq
         self._critic_soft_update_tau = critic_soft_update_tau
-        self._critic: nn.Module = critic_network_instance
-        self._critic_optimizer: optim.Optimizer = critic_optimizer
+        self._critic: nn.Module = critic_network_instances[0]
+        critic_param_list = [dict(critic_network_instance.named_parameters()) for critic_network_instance in critic_network_instances]
+        self._critic_params = {
+            k: torch.stack([params[k] for params in critic_param_list], dim=0)
+            for k in critic_param_list[0]
+        }
+        self._critic_optimizer = critic_optimizer
+        self._critic_optimizer_state = self._critic_optimizer.init(self._critic_params)
         if self._use_critic_target:
-            self._critic_target: nn.Module = copy.deepcopy(self._critic)
+            self._critic_target_params = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._critic_params)
 
         self._discount_factor = discount_factor
-        self._actor_learning_rate: float = self._actor_optimizer.param_groups[0]["lr"]
-        self._critic_learning_rate: float = self._critic_optimizer.param_groups[0]["lr"]
         self._current_steps = 0
         self._test_time = False
 
@@ -122,7 +134,6 @@ class ActorCriticBase(PolicyLearner):
 
         Args:
             subjective_state (SubjectiveState): Subjective state of the agent.
-            available_action_space (ActionSpace): Set of eligible actions.
             exploit (bool, optional): Determines the mode of operation. If True, the function
             operates in exploit mode. If False, it operates in explore mode. Defaults to False.
         Returns:
@@ -136,16 +147,17 @@ class ActorCriticBase(PolicyLearner):
             self._current_steps += 1
         with torch.no_grad():
             if self._is_action_continuous:
-                exploit_action = self._actor.sample_action(subjective_state)
+                exploit_action = vmap(
+                    lambda x, params, low, high : self._actor.sample_action(x, params, low, high)
+                )(subjective_state, self._actor_params, self._action_space.low, self._action_space.high)
                 action_probabilities = None
             else:
-                assert isinstance(self._action_space, DiscreteActionSpace)
                 action_probabilities = self._actor.get_policy_distribution(
                     state_batch=subjective_state,
                 )
-                # (action_space_size)
-                exploit_action_index = torch.argmax(action_probabilities)
-                exploit_action = self._action_space.actions[exploit_action_index]
+                # (num_exps x num_actions)
+                exploit_action_index = torch.argmax(action_probabilities, dim=-1)
+                exploit_action = self._actor.action_space.actions[exploit_action_index]
 
         # Step 2: return exploit action if no exploration,
         # else pass through the exploration module
@@ -162,77 +174,49 @@ class ActorCriticBase(PolicyLearner):
 
 
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:
-        """
-        Trains the actor and critic networks using a batch of transitions.
-        This method performs the following steps:
-
-        1. Updates the actor network with the input batch of transitions.
-        2. Updates the critic network with the input batch of transitions.
-        3. If using target network for critics (i.e. `use_critic_target` argument is True), the
-        function updates the critic target network.
-        4. If using target network for policy (i.e. `use_actor_target` argument is True), the
-        function updates the actor target network.
-
-        Note: While this method provides a general approach to actor-critic methods, specific
-        algorithms may override it to introduce unique behaviors. For instance, the TD3 algorithm
-        updates the actor network less frequently than the critic network.
-
-        Args:
-            batch (TransitionBatch): Batch of transitions to use for actor and critic updates.
-        Returns:
-            Dict[str, Any]: A dictionary containing the loss reports from the critic
-            and actor updates. These can be useful to track for debugging purposes.
-        """
         if isinstance(self.reward_centering, TD_RC):
-            if self.reward_centering.initialize_reward_rate == True:
-                self.reward_rate.data.fill_(batch.reward.mean())
-                # pyre-fixme
-                self.reward_centering.initialize_reward_rate: bool = False
-        actor_loss = self._actor_loss(batch)
-        self._actor_optimizer.zero_grad()
-        """
-        If the history summarization module is a neural network,
-        the computation graph of this neural network is used
-        to obtain both actor and critic losses.
-        Without retain_graph=True, after actor_loss.backward(), the computation graph is cleared.
-        After the graph is cleared, critic_loss.backward() fails.
-        """
-        actor_loss.backward(retain_graph=True)
-        self._actor_optimizer.step()
-        report = {"actor_loss": actor_loss.item()}
-        if isinstance(self.reward_centering, TD_RC):
-            self.reward_centering.optimizer.zero_grad()
-        self._critic_optimizer.zero_grad()
-        critic_loss = self._critic_loss(batch)
-        critic_loss.backward()
-        self._critic_optimizer.step()
+            if self.reward_centering.initialize_reward_rate:
+                self.reward_rate.data.fill_(batch.reward.mean(-1))
+                self.reward_centering.initialize_reward_rate = False
+
+        # Compute per-experiment gradients
+        actor_gradients = self._get_actor_gradient(batch)
+        critic_gradients = self._get_critic_gradient(batch)
+
+        # Update actor parameters
+        updates, self._actor_optimizer_state = self._actor_optimizer.update(
+            actor_gradients, self._actor_optimizer_state
+        )
+        self._actor_params = torchopt.apply_updates(self._actor_params, updates)
+
+        # Update critic parameters
+        updates, self._critic_optimizer_state = self._critic_optimizer.update(
+            critic_gradients, self._critic_optimizer_state
+        )
+        self._critic_params = torchopt.apply_updates(self._critic_params, updates)
+
         if isinstance(self.reward_centering, TD_RC):
             self.reward_centering.optimizer.step()
-        report["critic_loss"] = critic_loss.item()
-        report["reward_rate_estimate"] = self.reward_rate.item()
 
-        if (
-            self._use_critic_target
-            and self._training_steps % self._critic_target_update_freq == 0
-        ):
-            update_target_network(
-                self._critic_target,
-                self._critic,
+        # Soft update targets
+        if self._use_critic_target and self._training_steps % self._critic_target_update_freq == 0:
+            update_target_params(
+                self._critic_target_params,
+                self._critic_params,
                 self._critic_soft_update_tau,
             )
-        if (
-            self._use_actor_target
-            and self._training_steps % self._actor_target_update_freq == 0
-        ):
-            update_target_network(
-                self._actor_target,
-                self._actor,
+        if self._use_actor_target and self._training_steps % self._actor_target_update_freq == 0:
+            update_target_params(
+                self._actor_target_params,
+                self._actor_params,
                 self._actor_soft_update_tau,
             )
-        return report
+
+        return {}
+
 
     @abstractmethod
-    def _actor_loss(self, batch: TransitionBatch) -> torch.Tensor:
+    def _get_actor_gradient(self, batch: TransitionBatch) -> torch.Tensor:
         """
         Abstract method for implementing the algorithm-specific logic for updating the actor
         network. This method must be implemented by any concrete subclass to provide the specific
@@ -245,7 +229,7 @@ class ActorCriticBase(PolicyLearner):
         pass
 
     @abstractmethod
-    def _critic_loss(self, batch: TransitionBatch) -> torch.Tensor:
+    def _get_critic_gradient(self, batch: TransitionBatch) -> torch.Tensor:
         """
         Abstract method for implementing the algorithm-specific logic for updating the critic
         network. This method must be implemented by any concrete subclass to provide the specific
@@ -281,3 +265,12 @@ class ActorCriticBase(PolicyLearner):
             batch.state, batch.action, get_all_values=True
         )
         return torch.mean(qs).detach()
+    
+    def to(self, device: torch.device) -> None:
+        super().to(device)
+        self._actor_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_params)
+        self._critic_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_params)
+        self._actor_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_target_params)
+        self._critic_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_target_params)
+        self._actor_optimizer_state = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_optimizer_state)
+        self._critic_optimizer_state = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_optimizer_state)

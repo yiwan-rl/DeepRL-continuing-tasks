@@ -6,14 +6,10 @@
 
 # pyre-strict
 
-from .box import BoxSpace
-from .box_action import BoxActionSpace
-from .discrete import DiscreteSpace
-from .discrete_action import DiscreteActionSpace
+from .box import VectorBoxSpace
+from .discrete import VectorDiscreteSpace
 
 __all__ = [
-    "BoxActionSpace",
-    "BoxSpace",
-    "DiscreteActionSpace",
-    "DiscreteSpace",
+    "VectorBoxSpace",
+    "VectorDiscreteSpace",
 ]

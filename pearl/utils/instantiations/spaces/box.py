@@ -1,47 +1,24 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-#
+from typing import List
 
-# pyre-strict
-
-from __future__ import annotations
-
-import logging
-from typing import Optional, Union
-
-import numpy as np
 import torch
-
-from pearl.api.space import Space
-from pearl.utils.instantiations.spaces.utils import reshape_to_1d_tensor
 from torch import Tensor
 
-try:
-    import gymnasium as gym
-    from gymnasium.spaces import Box
-
-    logging.info("Using 'gymnasium' package.")
-except ModuleNotFoundError:
-    import gym
-    from gym.spaces import Box
-
-    logging.warning("Using deprecated 'gym' package.")
+import gymnasium as gym
+from gymnasium.spaces import Box
 
 
-class BoxSpace(Space):
-    """A continuous, box space. This class is a wrapper around Gymnasium's
-    `Box` space, but uses PyTorch tensors instead of NumPy arrays."""
+class VectorBoxSpace:
+    """A continuous, box space. This class is used to represent a list of box gym spaces.
+    """
 
     def __init__(
         self,
-        low: Union[float, np.ndarray, Tensor],
-        high: Union[float, np.ndarray, Tensor],
-        seed: Optional[Union[int, np.random.Generator]] = None,
+        low: Tensor,
+        high: Tensor,
+        actual_sizes: List[int],  # the actual sizes of the gym spaces
     ) -> None:
-        """Constructs a `BoxSpace`.
+        super(VectorBoxSpace, self).__init__()
+        """Contructs a `BoxSpace`.
 
         Args:
             low: The lower bound on each dimension of the space.
@@ -49,62 +26,32 @@ class BoxSpace(Space):
             seed: Random seed used to initialize the random number generator of the
                 underlying Gymnasium `Box` space.
         """
-        low = low.numpy(force=True) if isinstance(low, Tensor) else low
-        high = high.numpy(force=True) if isinstance(high, Tensor) else high
-        self._gym_space = Box(low=low, high=high, seed=seed)
+        self.low = low
+        self.high = high
+        self.actual_sizes = actual_sizes
+        self.device = None
 
-    @property
-    def is_continuous(self) -> bool:
-        """Checks whether this is a continuous space."""
-        return True
-
-    def sample(self, mask: Optional[Tensor] = None) -> Tensor:
+    def num_elements(self) -> int:
+        """Returns the number of elements in the space."""
+        return self.low.shape[0]
+    
+    def element_dim(self) -> int:
+        """Returns the dimension of each element in the space."""
+        return self.low.shape[1]
+    
+    def to(self, device: torch.device) -> None:
+        self.device = device
+        self.low = self.low.to(device)
+        self.high = self.high.to(device)
+    
+    def sample(self) -> Tensor:
         """Sample an element uniformly at random from the space.
-
-        Args:
-            mask: An unused argument for the case of a `BoxSpace`, which
-                does not support masking.
-
-        Returns:
-            A randomly sampled element.
         """
-        if mask is not None:
-            logging.warning("Masked sampling is not supported in `BoxSpace`. Ignoring.")
-        return torch.from_numpy(self._gym_space.sample())
-
-    @property
-    def low(self) -> Tensor:
-        """Returns the lower bound of the space."""
-        shape_length = len(self._gym_space.low.shape)
-        if (
-            shape_length == 1
-            or shape_length == 0
-            or (shape_length == 2 and self._gym_space.low.shape[0] == 1)
-        ):
-            return reshape_to_1d_tensor(torch.from_numpy(self._gym_space.low))
-        else:
-            return torch.from_numpy(self._gym_space.low)
-
-    @property
-    def high(self) -> Tensor:
-        """Returns the upper bound of the space."""
-        shape_length = len(self._gym_space.low.shape)
-        if (
-            shape_length == 1
-            or shape_length == 0
-            or (shape_length == 2 and self._gym_space.low.shape[0] == 1)
-        ):
-            return reshape_to_1d_tensor(torch.from_numpy(self._gym_space.high))
-        else:
-            return torch.from_numpy(self._gym_space.high)
-
-    @property
-    def shape(self) -> torch.Size:
-        """Returns the shape of an element of the space."""
-        return self.low.shape
+        assert self.device is not None, "Device is not set"
+        return torch.rand(self.low.shape).to(self.device) * (self.high - self.low) + self.low
 
     @staticmethod
-    def from_gym(gym_space: gym.Space) -> BoxSpace:
+    def from_gym(gym_spaces: List[gym.Space]):
         """Constructs a `BoxSpace` given a Gymnasium `Box` space.
 
         Args:
@@ -113,9 +60,25 @@ class BoxSpace(Space):
         Returns:
             A `BoxSpace` with the same bounds and seed as `gym_space`.
         """
-        assert isinstance(gym_space, Box)
-        return BoxSpace(
-            low=torch.from_numpy(gym_space.low),
-            high=torch.from_numpy(gym_space.high),
-            seed=gym_space._np_random,
+        for gym_space in gym_spaces:
+            assert isinstance(gym_space, Box)
+        
+        # if the spaces have different dimensions, we need to pad them to the same dimension to use vmap
+        max_dim = 0
+        for gym_space in gym_spaces:
+            if gym_space.low.shape[0] > max_dim:
+                max_dim = gym_space.low.shape[0]
+
+        # default low and high are -1 and 1
+        low = torch.ones((len(gym_spaces), max_dim)) * -1
+        high = torch.ones((len(gym_spaces), max_dim))
+
+        for i, gym_space in enumerate(gym_spaces):
+            low[i, :gym_space.low.shape[0]] = torch.from_numpy(gym_space.low)
+            high[i, :gym_space.high.shape[0]] = torch.from_numpy(gym_space.high)
+
+        return VectorBoxSpace(
+            low=low,
+            high=high,
+            actual_sizes=[gym_space.low.shape[0] for gym_space in gym_spaces],
         )

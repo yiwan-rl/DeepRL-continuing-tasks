@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 import torch
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 from pearl.api.state import SubjectiveState
 from pearl.neural_networks.common.utils import update_target_network
 from pearl.policy_learners.exploration_modules.exploration_module import (
@@ -23,7 +23,7 @@ from pearl.policy_learners.policy_learner import PolicyLearner
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
-from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
+from pearl.utils.instantiations.spaces.discrete import VectorDiscreteSpace
 from torch import optim
 from torch import nn
 
@@ -38,8 +38,8 @@ class DeepTDLearning(PolicyLearner):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        network_instance: nn.Module,
+        action_space: VectorDiscreteSpace,
+        network_instances: nn.ModuleList,
         optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
@@ -101,9 +101,9 @@ class DeepTDLearning(PolicyLearner):
         self._target_update_freq = target_update_freq
         self._soft_update_tau = soft_update_tau
 
-        self._Q: QValueNetwork = network_instance
+        self._Q: nn.Module = network_instances[0]
 
-        self._Q_target: QValueNetwork = copy.deepcopy(self._Q)
+        self._Q_target: nn.Module = copy.deepcopy(self._Q)
         self._optimizer = optimizer
 
     @property
@@ -123,8 +123,6 @@ class DeepTDLearning(PolicyLearner):
 
         Args:
             subjective_state (SubjectiveState): Current subjective state.
-            available_action_space (ActionSpace): Available action space at the current state.
-                Note that Pearl allows for action spaces to change dynamically.
             exploit (bool): When set to True, we output the exploit action (no exploration).
                 When set to False, the specified `exploration_module` is used to balance
                 between exploration and exploitation. Defaults to False.
@@ -132,21 +130,15 @@ class DeepTDLearning(PolicyLearner):
         Returns:
             Action: An action from the available action space.
         """
-        # TODO: Assumes gym action space.
-        # Fix the available action space.
-        assert isinstance(self._action_space, DiscreteActionSpace)
         with torch.no_grad():
-            batched_subjective_state = subjective_state.unsqueeze(0)  # (1 x state_dim)
-            batched_actions_representation = self._action_space.actions_batch.unsqueeze(0).to(self.device)  # (1 x number of actions x action_dim)
-            q_values = self._Q.get_q_values(
+            batched_subjective_state = subjective_state.unsqueeze(1)  # (num_exps x1 x state_dim)
+            q_values = self._Q(
                 state_batch=batched_subjective_state,
-                action_batch=batched_actions_representation,
-            )  # (1 x number of actions)
+            )  # (num_exps x 1 x number of actions)
             # this does a forward pass since all avaialble
             # actions are already stacked together
-            q_values = q_values.squeeze(0)  # (number of actions)
-            exploit_action_index = torch.argmax(q_values)
-            exploit_action = self._action_space.actions[exploit_action_index]
+            q_values = q_values.squeeze(1)  # (num_exps x number of actions)
+            exploit_action = torch.argmax(q_values, dim=1)
 
         if exploit:
             return exploit_action
@@ -166,9 +158,6 @@ class DeepTDLearning(PolicyLearner):
         """
         For a given batch of transitions, returns Q-value targets for the Bellman equation.
         Child classes should implement this method.
-
-        For example, this method in DQN returns
-        "max_{action in available_action_space} Q(next_state, action)".
         """
         pass
 
@@ -187,31 +176,31 @@ class DeepTDLearning(PolicyLearner):
             isinstance(self.reward_centering, TD_RC)
             and self.reward_centering.initialize_reward_rate == True
         ):
-            self.reward_rate.data.fill_(batch.reward.mean())
+            self.reward_rate.data.fill_(batch.reward.mean(-1))  # (num_exps)
             # pyre-fixme
             self.reward_centering.initialize_reward_rate = False
-        state_batch = batch.state  # (batch_size x state_dim)
-        action_batch = batch.action  # (batch_size x action_dim)
-        reward_batch = batch.reward  # (batch_size)
-        terminated_batch = batch.terminated  # (batch_size)
+        state_batch = batch.state  # (num_exps x batch_size x state_dim)
+        action_batch = batch.action  # (num_exps x batch_size x action_dim)
+        reward_batch = batch.reward  # (num_exps x batch_size)
+        terminated_batch = batch.terminated  # (num_exps x batch_size)
 
         batch_size = state_batch.shape[0]
         # sanity check they have same batch_size
-        assert reward_batch.shape[0] == batch_size
-        assert terminated_batch.shape[0] == batch_size
+        assert reward_batch.shape[1] == batch_size
+        assert terminated_batch.shape[1] == batch_size
 
         state_action_values = self._Q.get_q_values(
-            state_batch=state_batch,
-            action_batch=action_batch.unsqueeze(1),
-        )  # (batch_size, 1)
-        state_action_values = state_action_values.squeeze(-1)  # (batch_size)
+            state_batch=state_batch,    
+            action_batch=action_batch,
+        )  # (num_exps x batch_size x 1)
+        state_action_values = state_action_values.squeeze(-1)  # (num_exps x batch_size)
 
         # Compute the Bellman Target
         expected_state_action_values = (
             self.get_next_state_values(batch, batch_size)
             * self._discount_factor
             * (1 - terminated_batch.float())
-        ) + reward_batch  # (batch_size), r + gamma * V(s)
+        ) + reward_batch  # (num_exps x batch_size), r + gamma * V(s)
 
         criterion = torch.nn.MSELoss()
         bellman_loss = criterion(

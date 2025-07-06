@@ -51,10 +51,7 @@ class VanillaQValueNetwork(nn.Module):
             use_layer_norm=use_layer_norm,
         )
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self._model(x)
-
-    def get_q_values(
+    def forward(
         self,
         state_batch: Tensor,  # (batch_size x state_dim)
         action_batch: Tensor,  # (batch_size x number of query actions x action_dim) or (batch_size x action_dim)
@@ -64,7 +61,7 @@ class VanillaQValueNetwork(nn.Module):
             x = torch.cat(
                 [state_batch, action_batch], dim=-1
             )  # (batch_size x (state_dim + action_dim))
-            return self.forward(x).view(-1)  # (batch_size)
+            return self._model(x).view(-1)  # (batch_size)
         state_batch = torch.repeat_interleave(
             state_batch.unsqueeze(1), action_batch.shape[1], dim=1
         )  # (batch_size x number_of_actions_to_query x state_dim)
@@ -72,18 +69,10 @@ class VanillaQValueNetwork(nn.Module):
             [state_batch, action_batch], dim=-1
         )  # (batch_size x number_of_actions_to_query x (state_dim + action_dim))
         x = x.view(-1, x.shape[-1])
-        output = self.forward(x)  # ([batch_size x number_of_actions_to_query] x 1)
+        output = self._model(x)  # ([batch_size x number_of_actions_to_query] x 1)
         return output.view(
             state_batch.shape[0], action_batch.shape[1]
         )  # (batch_size x number_of_actions_to_query)
-
-    @property
-    def state_dim(self) -> int:
-        return self._state_dim
-
-    @property
-    def action_dim(self) -> int:
-        return self._action_dim
 
 
 class VanillaQValueMultiHeadNetwork(nn.Module):
@@ -110,35 +99,25 @@ class VanillaQValueMultiHeadNetwork(nn.Module):
             use_layer_norm=use_layer_norm,
         )
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self._model(x)
-
-    def get_q_values(
+    def forward(
         self,
-        state_batch: Tensor,  # (batch_size x state_dim)
-        action_batch: Tensor,  # (batch_size x number of query actions x action_dim) or # (batch_size x action_dim)
+        state_batch: Tensor,  # (num_exps x batch_size x state_dim)
+        action_batch: Tensor,  # (num_exps x batch_size x number of query actions x action_dim) or (num_exps x batch_size x action_dim)
     ) -> Tensor:
-        q_values_batch = self.forward(state_batch)  # (batch_size x num actions)
-        if len(action_batch.shape) == 2:
-            return (q_values_batch * action_batch).sum(-1)  # (batch_size)
+        q_values_batch = self._model(state_batch)  # (num_exps x batch_size x number of query actions)
+        if len(action_batch.shape) == 3:
+            return (q_values_batch * action_batch).sum(-1)  # (num_exps x batch_size)
         q_values_batch = torch.bmm(
             action_batch.type(
                 torch.float32
-            ),  # shape: (batch_size, number_of_actions_to_query, action_dim)
-            q_values_batch.unsqueeze(-1),  # (batch_size x action_dim x 1)
-        )  # (batch_size x number_of_actions_to_query x 1)
+            ),  # shape: (num_exps x batch_size x number of query actions x action_dim)
+            q_values_batch.unsqueeze(-1),  # (num_exps x batch_size x action_dim x 1)
+        )  # (num_exps x batch_size x number of query actions x 1)
         q_values_batch = q_values_batch.squeeze(
             -1
-        )  # (batch_size x number_of_actions_to_query)
+        )  # (num_exps x batch_size x number of query actions)
         return q_values_batch
 
-    @property
-    def state_dim(self) -> int:
-        return self._state_dim
-
-    @property
-    def action_dim(self) -> int:
-        return self._action_dim
 
 
 class EnsembleQValueNetwork(nn.Module):

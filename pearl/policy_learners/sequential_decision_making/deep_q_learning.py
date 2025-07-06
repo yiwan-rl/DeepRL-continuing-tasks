@@ -21,7 +21,7 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import optim
 from torch import nn
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 
 
 class DeepQLearning(DeepTDLearning):
@@ -31,8 +31,8 @@ class DeepQLearning(DeepTDLearning):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        network_instance: nn.Module,
+        action_space: VectorDiscreteSpace,
+        network_instances: nn.ModuleList,
         optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
         discount_factor: float = 0.99,
@@ -50,9 +50,7 @@ class DeepQLearning(DeepTDLearning):
 
         Args:
             state_dim: Dimension of the observation space.
-            action_space (ActionSpace, optional): Action space of the problem. It is kept optional
-                to allow for the use of dynamic action spaces (both `learn_batch` and `act`
-                functions). Defaults to None.
+            action_space (Space): Action space of the problem.
             hidden_dims (List[int], optional): Hidden dimensions of the default `QValueNetwork`
                 (taken to be `VanillaQValueNetwork`). Defaults to None.
             exploration_module (ExplorationModule, optional): Optional exploration module to
@@ -88,7 +86,7 @@ class DeepQLearning(DeepTDLearning):
             discount_factor=discount_factor,
             training_rounds=training_rounds,
             batch_size=batch_size,
-            network_instance=network_instance,
+            network_instances=network_instances,
             target_update_freq=target_update_freq,
             optimizer=optimizer,
             reward_rate=reward_rate,
@@ -113,21 +111,11 @@ class DeepQLearning(DeepTDLearning):
             torch.Tensor: Maximum Q-value over all available actions in the next state.
         """
 
-        next_state = batch.next_state  # (batch_size x state_dim)
+        next_state = batch.next_state  # (num_exps x batch_size x state_dim)
         assert next_state is not None
 
-        if (
-            self.all_action_batch is None
-            or self.all_action_batch.shape[0] != next_state.shape[0]
-        ):
-            self.all_action_batch = self._action_space.actions_batch.unsqueeze(0).repeat(next_state.shape[0], 1, 1).to(self.device)
-
         # Get Q values for each (state, action), where action \in {available_actions}
-        next_state_action_values = self._Q_target.get_q_values(
-            state_batch=next_state,
-            # pyre-fixme
-            action_batch=self.all_action_batch,
-        )  # (batch_size x action_space_size)
+        next_state_action_values = self._Q_target(state_batch=next_state)  # (num_exps x batch_size x num_actions)
 
-        # Torch.max(1) returns value, indices
-        return next_state_action_values.max(1)[0]  # (batch_size)
+        # Torch.max(-1) returns value, indices
+        return next_state_action_values.max(-1)[0]  # (num_exps x batch_size)

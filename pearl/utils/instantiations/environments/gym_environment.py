@@ -8,185 +8,170 @@
 # pyre-strict
 
 import logging
-from typing import Any, Dict, Optional, Tuple, Union
-
+from typing import Any, Dict, Optional, Union, List, Callable, Tuple
 import numpy as np
 from pearl.api.action import Action
 
-from pearl.api.action_space import ActionSpace
-from pearl.api.environment import Environment
 from pearl.api.observation import Observation
-from pearl.api.space import Space
-from pearl.utils.instantiations.spaces.box import BoxSpace
-from pearl.utils.instantiations.spaces.box_action import BoxActionSpace
-from pearl.utils.instantiations.spaces.discrete import DiscreteSpace
-from pearl.utils.instantiations.spaces.discrete_action import DiscreteActionSpace
-from torch import Tensor
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
+import torch
+import gymnasium as gym
+import multiprocessing as mp
 
-try:
-    import gymnasium as gym
-
-    logging.info("Using 'gymnasium' package.")
-except ModuleNotFoundError:
-    import gym
-
-    logging.warning("Using deprecated 'gym' package.")
-
-
-def single_element_tensor_to_int(x: Tensor) -> int:
-    return int(x)
-
-
-def tensor_to_numpy(x: Tensor) -> np.ndarray:
-    return x.numpy(force=True)
-
-
-GYM_TO_PEARL_ACTION_SPACE = {
-    "Discrete": DiscreteActionSpace,
-    "Box": BoxActionSpace,
-    # Add more here as needed
-}
-GYM_TO_PEARL_OBSERVATION_SPACE = {
-    "Discrete": DiscreteSpace,
-    "Box": BoxSpace,
-    # Add more here as needed
-}
-PEARL_TO_GYM_ACTION = {
-    "Discrete": single_element_tensor_to_int,
-    "Box": tensor_to_numpy,
+GYM_TO_VECTOR_SPACE = {
+    "Discrete": VectorDiscreteSpace,
+    "Box": VectorBoxSpace,
     # Add more here as needed
 }
 
-
-class GymEnvironment(Environment):
-    """A wrapper for `gym.Env` to behave like Pearl's `Environment`."""
-
-    def __init__(
-        self, env_or_env_name: Union[gym.Env, str], *args: Any, **kwargs: Any
-    ) -> None:
-        """Constructs a `GymEnvironment` wrapper.
-
-        Args:
-            env_or_env_name: A gym.Env instance or a name of a gym.Env.
-            args: Arguments passed to `gym.make()` if the first argument is a string.
-            kwargs: Keyword arguments passed to `gym.make()` if the first argument is a string.
-        """
-        if type(env_or_env_name) is str:
-            env = gym.make(env_or_env_name, *args, **kwargs)
-        else:
-            env = env_or_env_name
-        self.env: gym.Env = env
-        self._action_space: ActionSpace = _get_pearl_space(
-            gym_space=self.env.action_space,
-            gym_to_pearl_map=GYM_TO_PEARL_ACTION_SPACE,
+def _get_vector_space(
+    gym_spaces: List[gym.Space], gym_to_vector_map: Dict[str, Any]
+):
+    gym_space_name = gym_spaces[0].__class__.__name__
+    try:
+        vector_space_cls = gym_to_vector_map[gym_space_name]
+    except KeyError:
+        raise NotImplementedError(
+            f"The Gym space '{gym_space_name}' is not yet supported in Pearl."
         )
-        self._observation_space: Space = _get_pearl_space(
-            gym_space=self.env.observation_space,
-            gym_to_pearl_map=GYM_TO_PEARL_OBSERVATION_SPACE,
+    return vector_space_cls.from_gym(gym_spaces)
+
+
+def batched_worker(remote, parent_remote, env_fns: List[Callable[[], gym.Env]]):
+    parent_remote.close()
+    envs = [fn() for fn in env_fns]
+    while True:
+        cmd, data = remote.recv()
+        if cmd == "reset":
+            result = [env.reset(seed=data) for env in envs]
+            remote.send(result)
+        elif cmd == "step":
+            actions = data
+            result = [env.step(act) for env, act in zip(envs, actions)]
+            remote.send(result)
+        elif cmd == "close":
+            for env in envs:
+                env.close()
+            remote.close()
+            break
+        else:
+            raise NotImplementedError(f"Unknown command {cmd}")
+
+
+class GymEnvironment:
+    def __init__(
+        self,
+        env_fns: List[Callable[[], gym.Env]],
+        batched: bool = True,
+        num_processes: int = 10,
+    ) -> None:
+        self.batched = batched
+        self.num_envs = len(env_fns)
+
+        if batched:
+            print(f"Batched mode: {self.num_envs} envs, {num_processes} processes")
+            assert self.num_envs % num_processes == 0, "num_envs must divide evenly by num_processes"
+            self.num_processes = num_processes
+            self.envs_per_proc = self.num_envs // self.num_processes
+            self.remotes, self.work_remotes = zip(*[mp.Pipe() for _ in range(self.num_processes)])
+            self.processes = []
+
+            for i in range(self.num_processes):
+                sub_fns = env_fns[i*self.envs_per_proc : (i+1)*self.envs_per_proc]
+                p = mp.Process(target=batched_worker, args=(self.work_remotes[i], self.remotes[i], sub_fns))
+                p.daemon = True
+                p.start()
+                self.processes.append(p)
+                self.work_remotes[i].close()
+        else:
+            self.env = [fn() for fn in env_fns]
+
+        # Use one sample env to extract space info
+        sample_envs = [fn() for fn in env_fns]
+        self._action_space = _get_vector_space(
+            gym_spaces=[env.action_space for env in sample_envs],
+            gym_to_vector_map=GYM_TO_VECTOR_SPACE,
+        )
+        self._observation_space = _get_vector_space(
+            gym_spaces=[env.observation_space for env in sample_envs],
+            gym_to_vector_map=GYM_TO_VECTOR_SPACE,
         )
 
     @property
-    def action_space(self) -> ActionSpace:
-        """Returns the Pearl action space for this environment."""
+    def action_space(self):
         return self._action_space
 
     @property
-    def observation_space(self) -> Space:
+    def observation_space(self):
         return self._observation_space
 
-    def reset(self, seed: Optional[int] = None) -> Tuple[Observation, ActionSpace]:
-        """Resets the environment and returns the initial observation and
-        initial action space."""
-        # pyre-fixme: ActionSpace does not have _gym_space
-        # FIXME: private attribute _gym_space should not be accessed
-        # self._action_space._gym_space.seed(seed)
-        # self.env.action_space.seed(seed)
-        observation, info = self.env.reset(seed=seed)
-        # reset_result = self.env.reset()
-        # if isinstance(reset_result, Iterable) and isinstance(reset_result[1], dict):
-        #     # newer Gym versions return an info dict.
-        #     observation, info = self.env.reset(seed=seed)
-        # else:
-        #     # TODO: Deprecate this part at some point and only support new
-        #     # version of Gymnasium?
-        #     observation = list(reset_result.values())[0]  # pyre-ignore
-        if observation.dtype == np.float64:
-            observation = observation.astype(np.float32)
-        return observation, self.action_space
-
-    def step(self, action: Action):
-        """Takes one step in the environment given the agent's action. Returns a tuple containing the next observation, reward, and done flag."""
-        # Convert action to the format expected by Gymnasium
-        # Take a step in the environment and receive an action result
-        gym_action_result = self.env.step(action)
-        if len(gym_action_result) == 4:
-            # Older Gym versions use 'done' as opposed to 'terminated' and 'truncated'
-            observation, reward, done, info = gym_action_result  # pyre-ignore
-            if done:
-                truncated = info["TimeLimit.truncated"]
-                terminated = not truncated
-            else:
-                truncated = False
-                terminated = False
-        elif len(gym_action_result) == 5:
-            # Newer Gym versions use 'terminated' and 'truncated'
-            observation, reward, terminated, truncated, info = gym_action_result
+    def reset(self, seed: Optional[int] = None) -> Observation:
+        if self.batched:
+            for remote in self.remotes:
+                remote.send(("reset", seed))
+            results = sum([remote.recv() for remote in self.remotes], [])  # flatten
         else:
-            raise ValueError(
-                f"Unexpected action result from Gym (expected 4 or 5 elements): {gym_action_result}"
-            )
-        if "cost" in info.keys():
-            cost = info["cost"]
+            results = [env.reset(seed=seed) for env in self.env]
+
+        observations, infos = zip(*results)
+        observations = np.array([
+            np.pad(obs, (0, self._observation_space.element_dim() - len(obs)), mode='constant')
+            for obs in observations
+        ])
+        if observations.dtype == np.float64:
+            observations = observations.astype(np.float32)
+        return observations, infos
+
+
+    def step(self, action: Action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+        if self.batched:
+            chunks = np.array_split(action, self.num_processes)
+            for remote, act_chunk in zip(self.remotes, chunks):
+                remote.send(("step", act_chunk))
+            results = sum([remote.recv() for remote in self.remotes], [])  # flatten
         else:
-            cost = None
+            results = [env.step(action[i]) for i, env in enumerate(self.env)]
 
-        if observation.dtype == np.float64:
-            observation = observation.astype(np.float32)
-        if isinstance(reward, np.float64):
-            reward = reward.astype(np.float32)
-        if isinstance(cost, np.float64):
-            cost = cost.astype(np.float32)
-
-        return observation, reward, terminated, truncated, info
-
+        observations, rewards, terminations, truncations, infos = zip(*results)
+        observations = np.array([
+            np.pad(obs, (0, self._observation_space.element_dim() - len(obs)), mode='constant')
+            for obs in observations
+        ])
+        if observations.dtype == np.float64:
+            observations = observations.astype(np.float32)
+        return (
+            np.array(observations),
+            np.array(rewards),
+            np.array(terminations),
+            np.array(truncations),
+            infos,
+        )
+    
 
     def render(self) -> None:
-        self.env.render()
+        if self.batched:
+            raise NotImplementedError("Rendering is not supported in batched mode")
+        for env in self.env:
+            env.render()
 
     def close(self) -> None:
-        self.env.close()
+        if self.batched:
+            for remote in self.remotes:
+                remote.send(("close", None))
+            for p in self.processes:
+                p.join()
+        else:
+            for env in self.env:
+                env.close()
 
     def __str__(self) -> str:
-        if self.env.spec is not None:
-            return self.env.spec.id
+        if not self.batched:
+            rtn_str = ""
+            for env in self.env:
+                if env.spec is not None:
+                    rtn_str += env.spec.id + "_"
+                else:
+                    rtn_str += "CustomGymEnvironment_"
+            return rtn_str[:-1]
         else:
-            return "CustomGymEnvironment"
-
-
-def _get_gym_action(
-    pearl_action: Action, gym_space: gym.Space
-) -> Union[int, np.ndarray]:
-    """A helper function to convert a Pearl `Action` to an action compatible with
-    the Gym action space `gym_space`."""
-    gym_space_name = gym_space.__class__.__name__
-    try:
-        pearl_to_gym_action_transform = PEARL_TO_GYM_ACTION[gym_space_name]
-    except KeyError:
-        raise NotImplementedError(
-            f"The Gym space '{gym_space_name}' is not yet supported in Pearl."
-        )
-    return pearl_to_gym_action_transform(pearl_action)
-
-
-def _get_pearl_space(
-    gym_space: gym.Space, gym_to_pearl_map: Dict[str, Any]
-) -> ActionSpace:
-    """Returns the Pearl action space for this environment."""
-    gym_space_name = gym_space.__class__.__name__
-    try:
-        pearl_action_space_cls = gym_to_pearl_map[gym_space_name]
-    except KeyError:
-        raise NotImplementedError(
-            f"The Gym space '{gym_space_name}' is not yet supported in Pearl."
-        )
-    return pearl_action_space_cls.from_gym(gym_space)
+            return f"BatchedGymEnvironment_{self.num_envs}_envs_{self.num_processes}_procs"

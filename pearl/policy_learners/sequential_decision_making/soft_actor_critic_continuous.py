@@ -22,7 +22,7 @@ from pearl.utils.functional_utils.learning.critic_utils import (
 )
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace
 
 class ContinuousSoftActorCritic(ActorCriticBase):
     """
@@ -31,9 +31,9 @@ class ContinuousSoftActorCritic(ActorCriticBase):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        actor_network_instance: nn.Module,
-        critic_network_instance: nn.Module,
+        action_space: VectorBoxSpace,
+        actor_network_instances: nn.ModuleList,
+        critic_network_instances: nn.ModuleList,
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
@@ -60,8 +60,8 @@ class ContinuousSoftActorCritic(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=True,
-            actor_network_instance=actor_network_instance,
-            critic_network_instance=critic_network_instance,
+            actor_network_instances=actor_network_instances,
+            critic_network_instances=critic_network_instances,
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
             reward_rate=reward_rate,
@@ -81,7 +81,7 @@ class ContinuousSoftActorCritic(ActorCriticBase):
             self.register_buffer("_entropy_coef", torch.exp(self._log_entropy).detach())
             self.register_buffer(
                 "_target_entropy",
-                -torch.tensor(self._action_space.action_dim)
+                -torch.tensor(self._action_space.element_dim())
                 + target_entropy_offset,
             )
         else:

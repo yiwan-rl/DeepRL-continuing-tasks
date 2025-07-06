@@ -12,7 +12,7 @@ from typing import Optional
 import torch
 
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace
 from pearl.api.state import SubjectiveState
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
     noise_scaling,
@@ -39,7 +39,7 @@ class NormalDistributionExploration(ExplorationModule):
 
     def act(
         self,
-        action_space: ActionSpace,
+        action_space: VectorBoxSpace,
         subjective_state: Optional[SubjectiveState] = None,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
@@ -49,9 +49,7 @@ class NormalDistributionExploration(ExplorationModule):
         assert exploit_action is not None
         device = exploit_action.device
         # checks that the exploit action is feasible in the available action space
-        low = action_space.low.clone().to(device)
-        high = action_space.high.clone().to(device)
-        assert torch.all(exploit_action >= low) and torch.all(exploit_action <= high)
+        assert torch.all(exploit_action >= action_space.low) and torch.all(exploit_action <= action_space.high)
 
         action_dim = exploit_action.size()  # dimension of the action space
 
@@ -69,8 +67,8 @@ class NormalDistributionExploration(ExplorationModule):
         )
 
         # scale noise according to the action space
-        scaled_noise = noise_scaling(action_space, noise)
+        scaled_noise = noise_scaling(action_space.low, action_space.high, noise)
         action = exploit_action + scaled_noise  # add noise
 
         # clip final action value to be within bounds of the action space
-        return torch.clamp(action, low, high)
+        return torch.clamp(action, action_space.low, action_space.high)

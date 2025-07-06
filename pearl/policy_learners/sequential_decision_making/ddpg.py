@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any, List
 
 import torch
 
@@ -18,12 +18,64 @@ from pearl.policy_learners.sequential_decision_making.actor_critic_base import (
     ActorCriticBase,
 )
 from pearl.replay_buffers.transition import TransitionBatch
-from pearl.utils.functional_utils.learning.critic_utils import (
-    ensemble_critic_action_value_loss,
-)
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace
 from torch import nn, optim
+from torch import vmap
+import torch.nn.functional as F
+from functorch import grad
+
+
+def actor_loss_fn(
+        actor_network_instance: nn.Module, 
+        actor_params, 
+        critic_network_instance: nn.Module, 
+        critic_params, 
+        state,
+        action_space_low,
+        action_space_high,
+    ):
+    # Compute scalar actor loss for ONE experiment
+    # state: (batch_size, state_dim)
+    # actor_params: parameters for one experiment
+
+    action_batch = actor_network_instance.sample_action(state, actor_params, action_space_low, action_space_high)  # (batch_size, action_dim)
+    # Critic ensemble forward pass
+    q = torch.func.functional_call(critic_network_instance, critic_params, (state, action_batch))  # (batch_size)
+
+    loss = -q.mean()
+    return loss
+
+
+def critic_loss_fn(
+    actor_network_instance: nn.Module,
+    actor_target_params,
+    critic_network_instance: nn.Module,
+    critic_params,
+    critic_target_params,
+    state,
+    action,
+    terminated,
+    reward,
+    next_state,
+    discount_factor,
+    action_space_low,
+    action_space_high,
+):
+    # Compute scalar critic loss for ONE experiment
+
+    with torch.no_grad():
+        next_action = actor_network_instance.sample_action(next_state, actor_target_params, action_space_low, action_space_high)  # (batch_size, action_dim)
+        next_q = torch.func.functional_call(critic_network_instance, critic_target_params, (next_state, next_action))  # (batch_size)
+
+        expected_state_action_values = (
+            next_q * discount_factor * (1 - terminated.float())
+        ) + reward  # (batch_size)
+
+    q = torch.func.functional_call(critic_network_instance, critic_params, (state, action))  # (batch_size)
+
+    loss = F.mse_loss(q, expected_state_action_values.detach())
+    return loss
 
 
 class DeepDeterministicPolicyGradient(ActorCriticBase):
@@ -34,9 +86,9 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        actor_network_instance: nn.Module,
-        critic_network_instance: nn.Module,
+        action_space: VectorBoxSpace,
+        actor_network_instances: List[nn.Module],
+        critic_network_instances: List[nn.Module],
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
@@ -61,61 +113,66 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
             training_rounds=training_rounds,
             batch_size=batch_size,
             is_action_continuous=True,
-            actor_network_instance=actor_network_instance,
-            critic_network_instance=critic_network_instance,
+            actor_network_instances=actor_network_instances,
+            critic_network_instances=critic_network_instances,
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
             reward_rate=reward_rate,
             reward_centering=reward_centering,
         )
 
-    def _actor_loss(self, batch: TransitionBatch) -> torch.Tensor:
-
-        # sample a batch of actions from the actor network; shape (batch_size, action_dim)
-        action_batch = self._actor.sample_action(batch.state)
-
-        # obtain q values for (batch.state, action_batch) from the first critic
-        q = self._critic.get_q_values(
-            state_batch=batch.state,
-            action_batch=action_batch,
-            z=0,
+        # Wrap grad with vmap to compute gradients per experiment
+        self._actor_grad_fn = vmap(
+            grad(actor_loss_fn, argnums=1),
+            in_dims=(None, 0, None, 0, 1, 0, 0),  # actor_network_instance, actor_params, critic_network_instance, critic_params, state, action_space_low, action_space_high
+        )
+        self._critic_grad_fn = vmap(
+            grad(critic_loss_fn, argnums=3),
+            in_dims=(
+                None,  # actor_network_instance
+                0,  # actor_target_params batched over experiments
+                None,  # critic_network_instance
+                0,  # critic_params batched over experiments
+                0,  # critic_target_params batched over experiments
+                1,  # state
+                1,  # action
+                1,  # terminated
+                1,  # reward
+                1,  # next_state
+                None,  # discount_factor
+                0,  # action_space_low
+                0,  # action_space_high
+            ),
         )
 
-        # optimization objective: optimize actor to maximize Q(s, a)
-        loss = -q.mean()
-
-        return loss
-
-    def _critic_loss(self, batch: TransitionBatch) -> torch.Tensor:
-
-        with torch.no_grad():
-            # sample a batch of next actions from target actor network;
-            next_action = self._actor_target.sample_action(batch.next_state)
-            # (batch_size, action_dim)
-            # get q values of (batch.next_state, next_action) from targets of ensemble critic
-            next_qs = self._critic_target.get_q_values(
-                state_batch=batch.next_state,
-                action_batch=next_action,
-                get_all_values=True,
-            )  # shape (ensemble_critic_size, batch_size)
-
-            # clipped double q learning (reduce overestimation bias); shape (batch_size)
-            next_q = torch.min(next_qs, dim=0).values  # shape (batch_size)
-
-            # compute bellman target:
-            # r + gamma * (min{Qtarget_1(s', a from target actor network),
-            #                  Qtarget_2(s', a from target actor network)})
-            expected_state_action_values = (
-                next_q * self._discount_factor * (1 - batch.terminated.float())
-            ) + batch.reward  # shape (batch_size)
-
-        # update ensemble critics towards bellman target
-        loss = ensemble_critic_action_value_loss(
-            state_batch=batch.state,
-            action_batch=batch.action,
-            expected_target_batch=expected_state_action_values,
-            critic=self._critic,
-            reward_rate=self.reward_rate,
+    def _get_actor_gradient(self, batch: TransitionBatch) -> torch.Tensor:
+        # batch.state shape: (batch_size, num_exps, state_dim)
+        # Make sure batch.state shape is (batch_size, num_exps, state_dim)
+        grads = self._actor_grad_fn(
+            self._actor,
+            self._actor_params,
+            self._critic,
+            self._critic_params,
+            batch.state,
+            self._action_space.low,
+            self._action_space.high,
         )
+        return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)
 
-        return loss
+    def _get_critic_gradient(self, batch: TransitionBatch) -> torch.Tensor:
+        grads = self._critic_grad_fn(
+            self._actor,
+            self._actor_target_params,
+            self._critic,
+            self._critic_params,
+            self._critic_target_params,
+            batch.state,
+            batch.action,
+            batch.terminated,
+            batch.reward,
+            batch.next_state,
+            self._discount_factor,
+            self._action_space.low,
+            self._action_space.high,
+        )
+        return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)

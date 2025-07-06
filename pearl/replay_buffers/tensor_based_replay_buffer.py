@@ -53,16 +53,16 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             self.observations = torch.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
             # pyre-fixme
             self.actions = torch.zeros((self.capacity,) + action.shape, dtype=action.dtype)
-            self.rewards = torch.zeros((self.capacity), dtype=torch.float32)
-            self.terminateds = torch.zeros((self.capacity), dtype=torch.bool)
-            self.truncateds = torch.zeros((self.capacity), dtype=torch.bool)
+            self.rewards = torch.zeros((self.capacity,) + reward.shape, dtype=reward.dtype)
+            self.terminateds = torch.zeros((self.capacity,) + terminated.shape, dtype=terminated.dtype)
+            self.truncateds = torch.zeros((self.capacity,) + truncated.shape, dtype=truncated.dtype)
             self.next_observations = torch.zeros(
                 (self.capacity,) + next_obs.shape, dtype=next_obs.dtype
             )
         # pyre-fixme
         self.observations[self.pos] = obs
         self.actions[self.pos] = action
-        self.rewards[self.pos] = reward.item()
+        self.rewards[self.pos] = reward
         self.terminateds[self.pos] = terminated
         self.truncateds[self.pos] = truncated
         self.next_observations[self.pos] = next_obs

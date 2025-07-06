@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, TypeVar
 
 import torch
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
 from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -42,7 +42,7 @@ class PolicyLearner(torch.nn.Module, ABC):
 
     def __init__(
         self,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace | VectorBoxSpace,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
         training_rounds: int = 100,
@@ -51,8 +51,8 @@ class PolicyLearner(torch.nn.Module, ABC):
         reward_centering: Optional[TD_RC | RVI_RC | MA_RC] = None,
         **options: Any,
     ) -> None:
-        super(PolicyLearner, self).__init__()
-        self._action_space: ActionSpace = action_space
+        super().__init__()
+        self._action_space: VectorDiscreteSpace | VectorBoxSpace = action_space
         self._exploration_module: ExplorationModule = exploration_module
         self._training_rounds = training_rounds
         self._batch_size = batch_size
@@ -124,6 +124,10 @@ class PolicyLearner(torch.nn.Module, ABC):
                 else:
                     report[k] = [v]
         return report
+    
+    def to(self, device: torch.device) -> None:
+        super().to(device)
+        self._action_space.to(device)
 
     @abstractmethod
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:

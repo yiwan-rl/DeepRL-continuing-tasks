@@ -106,11 +106,11 @@ def ensemble_critic_action_value_loss(
 
     Args:
         state_batch (torch.Tensor): A batch of states with expected shape
-            `(batch_size, state_dim)`.
+            `(num_exps x batch_size x state_dim)`.
         action_batch (torch.Tensor): A batch of actions with expected shape
-            `(batch_size, action_dim)`.
+            `(num_exps x batch_size x action_dim)`.
         expected_target_batch (torch.Tensor): The batch of target estimates
-            (i.e. RHS of the Bellman equation) with expected shape `(batch_size)`.
+            (i.e. RHS of the Bellman equation) with expected shape `(num_exps x batch_size)`.
         critic (Ensemble Critic): The ensemble critic network to update.
     Returns:
         loss (torch.Tensor): Sum of mean squared errors in the Bellman equation (for action-value
@@ -122,12 +122,12 @@ def ensemble_critic_action_value_loss(
         state_batch,
         action_batch,
         get_all_values=True,
-    )  # shape (num_critic, batch_size)
+    )  # shape (num_exps x num_critic x batch_size)
     loss_list = []
-    for i in range(qs.shape[0]):
+    for i in range(qs.shape[1]):
         loss_list.append(
             criterion(
-                qs[i].reshape_as(expected_target_batch) + reward_rate,
+                qs[:, i, :] + reward_rate,
                 expected_target_batch.detach(),
             )
         )

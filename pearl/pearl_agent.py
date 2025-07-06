@@ -101,10 +101,10 @@ class PearlAgent:
         self.replay_buffer.push(
             obs=self._latest_observation,
             action=self._latest_action,
-            reward=reward,
+            reward=torch.from_numpy(reward),
             next_obs=next_observation,
-            terminated=terminated,
-            truncated=truncated,
+            terminated=torch.from_numpy(terminated),
+            truncated=torch.from_numpy(truncated),
         )
         self._latest_observation = next_observation
 

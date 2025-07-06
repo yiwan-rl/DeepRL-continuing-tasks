@@ -13,7 +13,7 @@ from typing import Optional
 import torch
 
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.common.uniform_exploration_base import (
     UniformExplorationBase,
@@ -50,7 +50,7 @@ class EGreedyExploration(UniformExplorationBase):
     def act(
         self,
         subjective_state: SubjectiveState,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace,
         exploit_action: Optional[Action],
         values: Optional[torch.Tensor] = None,
         action_availability_mask: Optional[torch.Tensor] = None,

@@ -10,11 +10,11 @@
 from typing import Any, Dict, Optional, Union
 
 import torch
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     EnsembleQValueNetwork,
-    
+
 )
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -42,7 +42,7 @@ class SoftActorCritic(ActorCriticBase):
 
     def __init__(
         self,
-        action_space: ActionSpace,
+        action_space: VectorDiscreteSpace,
         actor_network_instance: nn.Module,
         critic_network_instance: nn.Module,
         actor_optimizer: optim.Optimizer,
@@ -111,9 +111,6 @@ class SoftActorCritic(ActorCriticBase):
             self.register_buffer("_entropy_coef", torch.tensor(entropy_coef))
         self.all_action_batch: Optional[torch.Tensor] = None
 
-    def reset(self, action_space: ActionSpace) -> None:
-        self._action_space = action_space
-
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:
         actor_critic_loss = super().learn_batch(batch)
 
@@ -167,10 +164,10 @@ class SoftActorCritic(ActorCriticBase):
             state_batch=next_state_batch,
             action_batch=self.all_action_batch,
             get_all_values=True,
-        )  # (ensemble_critic_size, batch_size, action_space_size)
+        )  # (ensemble_critic_size, batch_size, num_actions)
 
         # clipped double q-learning (reduce overestimation bias)
-        next_q = torch.min(next_qs, dim=0).values  # (batch_size, action_space_size)
+        next_q = torch.min(next_qs, dim=0).values  # (batch_size, num_actions)
         # random ensemble distillation (reduce overestimation bias)
         # random_index = torch.randint(0, 2, (1,)).item()
         # next_q = next_q1 if random_index == 0 else next_q2
@@ -180,12 +177,12 @@ class SoftActorCritic(ActorCriticBase):
 
         next_state_policy_dist = self._actor.get_policy_distribution(
             state_batch=next_state_batch,
-        )  # (batch_size x action_space_size)
+        )  # (batch_size x num_actions)
 
         # Entropy Regularization
         next_q = (
             next_q - self._entropy_coef * torch.log(next_state_policy_dist + 1e-8)
-        ) * next_state_policy_dist  # (batch_size x action_space_size)
+        ) * next_state_policy_dist  # (batch_size x num_actions)
 
         return next_q.sum(dim=1)
 
@@ -195,18 +192,18 @@ class SoftActorCritic(ActorCriticBase):
             self.all_action_batch is None
             or self.all_action_batch.shape[0] != state_batch.shape[0]
         ):
-            self.all_action_batch = self._action_space.actions_batch.unsqueeze(0).repeat(state_batch.shape[0], 1, 1).to(self.device)
+            self.all_action_batch = self._action_space.actions_batch.unsqueeze(0).expand(state_batch.shape[0], -1, -1)
         # get q values of (states, all actions) from twin critics
         qs = self._critic.get_q_values(
             state_batch=state_batch,
             action_batch=self.all_action_batch,
             get_all_values=True,
-        )  # (ensemble_critic_size, batch_size, action_space_size)
+        )  # (ensemble_critic_size, batch_size, num_actions)
         # clipped double q learning (reduce overestimation bias)
-        q = torch.min(qs, dim=0).values  # (batch_size, action_space_size)
+        q = torch.min(qs, dim=0).values  # (batch_size, num_actions)
         new_policy_dist = self._actor.get_policy_distribution(
             state_batch=state_batch,
-        )  # (batch_size x action_space_size)
+        )  # (batch_size x num_actions)
         self._action_probs_cache = new_policy_dist
         self._action_log_probs_cache = torch.log(new_policy_dist + 1e-8)
 

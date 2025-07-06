@@ -12,7 +12,7 @@ from typing import Optional
 
 import torch
 from pearl.api.action import Action
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace
 from pearl.api.state import SubjectiveState
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -43,7 +43,7 @@ class Warmup(ExplorationModuleWrapper):
     def act(
         self,
         subjective_state: SubjectiveState,
-        action_space: ActionSpace,
+        action_space: VectorBoxSpace,
         values: Optional[torch.Tensor] = None,
         exploit_action: Optional[Action] = None,
         action_availability_mask: Optional[torch.Tensor] = None,

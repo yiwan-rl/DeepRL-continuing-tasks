@@ -14,7 +14,7 @@ from pearl.neural_networks.common.utils import update_target_network
 
 from pearl.neural_networks.sequential_decision_making.q_value_networks import (
     EnsembleQValueNetwork,
-    
+
 )
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
@@ -28,7 +28,7 @@ from pearl.utils.functional_utils.learning.critic_utils import (
 )
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from torch import nn, optim
-from pearl.api.action_space import ActionSpace
+from pearl.utils.instantiations.spaces import VectorBoxSpace
 
 
 class TD3(DeepDeterministicPolicyGradient):
@@ -40,9 +40,9 @@ class TD3(DeepDeterministicPolicyGradient):
 
     def __init__(
         self,
-        action_space: ActionSpace,
-        actor_network_instance: nn.Module,
-        critic_network_instance: nn.Module,
+        action_space: VectorBoxSpace,
+        actor_network_instances: nn.ModuleList,
+        critic_network_instances: nn.ModuleList,
         actor_optimizer: optim.Optimizer,
         critic_optimizer: optim.Optimizer,
         exploration_module: ExplorationModule,
@@ -67,8 +67,8 @@ class TD3(DeepDeterministicPolicyGradient):
             training_rounds=training_rounds,
             batch_size=batch_size,
             ensemble_critic_size=ensemble_critic_size,
-            actor_network_instance=actor_network_instance,
-            critic_network_instance=critic_network_instance,
+            actor_network_instances=actor_network_instances,
+            critic_network_instances=critic_network_instances,
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
             reward_rate=reward_rate,
@@ -154,8 +154,8 @@ class TD3(DeepDeterministicPolicyGradient):
             )  # shape (batch_size, action_dim)
 
             # rescale the noise
-            low = self._action_space.low.clone().to(batch.device)
-            high = self._action_space.high.clone().to(batch.device)
+            low = self._action_space.low
+            high = self._action_space.high
             noise = noise * (high - low) / 2
 
             # add clipped noise to next_action
