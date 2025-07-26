@@ -15,7 +15,7 @@ class VectorBoxSpace:
         self,
         low: Tensor,
         high: Tensor,
-        actual_sizes: List[int],  # the actual sizes of the gym spaces
+        mask: Tensor,
     ) -> None:
         super(VectorBoxSpace, self).__init__()
         """Contructs a `BoxSpace`.
@@ -28,8 +28,9 @@ class VectorBoxSpace:
         """
         self.low = low
         self.high = high
-        self.actual_sizes = actual_sizes
         self.device = None
+        self.mask = mask
+        self.actual_sizes = mask.sum(dim=1, dtype=torch.int32)
 
     def num_elements(self) -> int:
         """Returns the number of elements in the space."""
@@ -43,12 +44,15 @@ class VectorBoxSpace:
         self.device = device
         self.low = self.low.to(device)
         self.high = self.high.to(device)
-    
+        self.mask = self.mask.to(device)
+        
     def sample(self) -> Tensor:
         """Sample an element uniformly at random from the space.
         """
         assert self.device is not None, "Device is not set"
-        return torch.rand(self.low.shape).to(self.device) * (self.high - self.low) + self.low
+        sampled_tensor = torch.rand(self.low.shape).to(self.device) * (self.high - self.low) + self.low
+        sampled_tensor = sampled_tensor * self.mask
+        return sampled_tensor
 
     @staticmethod
     def from_gym(gym_spaces: List[gym.Space]):
@@ -72,13 +76,14 @@ class VectorBoxSpace:
         # default low and high are -1 and 1
         low = torch.ones((len(gym_spaces), max_dim)) * -1
         high = torch.ones((len(gym_spaces), max_dim))
+        mask = torch.zeros((len(gym_spaces), max_dim))
 
         for i, gym_space in enumerate(gym_spaces):
             low[i, :gym_space.low.shape[0]] = torch.from_numpy(gym_space.low)
             high[i, :gym_space.high.shape[0]] = torch.from_numpy(gym_space.high)
-
+            mask[i, :gym_space.high.shape[0]] = 1
         return VectorBoxSpace(
             low=low,
             high=high,
-            actual_sizes=[gym_space.low.shape[0] for gym_space in gym_spaces],
+            mask=mask,
         )

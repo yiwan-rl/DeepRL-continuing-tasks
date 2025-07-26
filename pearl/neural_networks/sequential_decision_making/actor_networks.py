@@ -309,6 +309,7 @@ class VanillaContinuousActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: Optional[List[int]],
         output_dim: int,
+        effective_input_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
         self._model: nn.Module = mlp_block(
@@ -316,12 +317,21 @@ class VanillaContinuousActorNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=output_dim,
             last_activation="tanh",
+            effective_input_dim=effective_input_dim,
         )
+            
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self._model(x)
 
-    def sample_action(self, x: torch.Tensor, params, action_space_low: torch.Tensor, action_space_high: torch.Tensor) -> torch.Tensor:
+    def sample_action(
+            self, 
+            x: torch.Tensor, 
+            params: torch.Tensor, 
+            action_space_low: torch.Tensor, 
+            action_space_high: torch.Tensor, 
+            action_space_mask: torch.Tensor,
+        ) -> torch.Tensor:
         """
         Sample an action from the actor network.
         Args:
@@ -331,6 +341,7 @@ class VanillaContinuousActorNetwork(nn.Module):
         """
         normalized_action = torch.func.functional_call(self, params, (x))
         action = action_scaling(action_space_low, action_space_high, normalized_action)
+        action = action * action_space_mask
         return action
 
 

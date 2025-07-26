@@ -47,6 +47,7 @@ def batched_worker(remote, parent_remote, env_fns: List[Callable[[], gym.Env]]):
             remote.send(result)
         elif cmd == "step":
             actions = data
+            # remove the padding and send to the envs
             result = [env.step(act) for env, act in zip(envs, actions)]
             remote.send(result)
         elif cmd == "close":
@@ -70,14 +71,13 @@ class GymEnvironment:
 
         if batched:
             print(f"Batched mode: {self.num_envs} envs, {num_processes} processes")
-            assert self.num_envs % num_processes == 0, "num_envs must divide evenly by num_processes"
             self.num_processes = num_processes
-            self.envs_per_proc = self.num_envs // self.num_processes
+            self.env_indices_per_proc_list = np.array_split(np.arange(self.num_envs), self.num_processes)
             self.remotes, self.work_remotes = zip(*[mp.Pipe() for _ in range(self.num_processes)])
             self.processes = []
 
             for i in range(self.num_processes):
-                sub_fns = env_fns[i*self.envs_per_proc : (i+1)*self.envs_per_proc]
+                sub_fns = [env_fns[j] for j in self.env_indices_per_proc_list[i]]
                 p = mp.Process(target=batched_worker, args=(self.work_remotes[i], self.remotes[i], sub_fns))
                 p.daemon = True
                 p.start()
@@ -114,6 +114,8 @@ class GymEnvironment:
             results = [env.reset(seed=seed) for env in self.env]
 
         observations, infos = zip(*results)
+
+        # pad the observations to the same dimension
         observations = np.array([
             np.pad(obs, (0, self._observation_space.element_dim() - len(obs)), mode='constant')
             for obs in observations
@@ -125,14 +127,19 @@ class GymEnvironment:
 
     def step(self, action: Action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
         if self.batched:
-            chunks = np.array_split(action, self.num_processes)
-            for remote, act_chunk in zip(self.remotes, chunks):
+            # remove the padding
+            unpadded_actions = [action[i, :self._action_space.actual_sizes[i]] for i in range(self.num_envs)]
+            for i in range(self.num_processes):
+                remote = self.remotes[i]
+                act_chunk = [unpadded_actions[j] for j in self.env_indices_per_proc_list[i]]
                 remote.send(("step", act_chunk))
             results = sum([remote.recv() for remote in self.remotes], [])  # flatten
         else:
             results = [env.step(action[i]) for i, env in enumerate(self.env)]
 
         observations, rewards, terminations, truncations, infos = zip(*results)
+
+        # pad the observations to the same dimension
         observations = np.array([
             np.pad(obs, (0, self._observation_space.element_dim() - len(obs)), mode='constant')
             for obs in observations

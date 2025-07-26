@@ -8,11 +8,13 @@
 # pyre-strict
 
 import logging
+import math
 from typing import Any, List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 
 from pearl.neural_networks.common.residual_wrapper import ResidualWrapper
 
@@ -45,6 +47,7 @@ def mlp_block(
     last_activation: Optional[str] = None,
     dropout_ratio: float = 0.0,
     use_skip_connections: bool = False,
+    effective_input_dim: Optional[int] = None,
     **kwargs: Any,
 ) -> nn.Module:
     """
@@ -72,6 +75,11 @@ def mlp_block(
         single_layers.append(
             nn.Linear(input_dim_current_layer, output_dim_current_layer)
         )
+        if effective_input_dim is not None:
+            fan_in = effective_input_dim
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            init.uniform_(single_layers[0].weight, -bound, bound)
+            init.uniform_(single_layers[0].bias, -bound, bound)
         if use_layer_norm:
             single_layers.append(nn.LayerNorm(output_dim_current_layer))
         if dropout_ratio > 0:

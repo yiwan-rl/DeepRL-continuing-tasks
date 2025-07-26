@@ -53,8 +53,8 @@ class Warmup(ExplorationModuleWrapper):
             action = action_space.sample()
             if self._has_agent_reset:
                 reset_prob = 1.0 / random.randint(1, 1000)
-                action[-1] = action_space.low[-1] + reset_prob * (
-                    action_space.high[-1] - action_space.low[-1]
+                action[action_space.actual_sizes - 1] = action_space.low[action_space.actual_sizes - 1] + reset_prob * (
+                    action_space.high[action_space.actual_sizes - 1] - action_space.low[action_space.actual_sizes - 1]
                 )
         else:
             action = self.exploration_module.act(

@@ -40,6 +40,8 @@ class VanillaQValueNetwork(nn.Module):
         action_dim: int,
         hidden_dims: List[int],
         use_layer_norm: bool = False,
+        effective_state_dim: Optional[int] = None,
+        effective_action_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
         self._state_dim: int = state_dim
@@ -49,6 +51,7 @@ class VanillaQValueNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=1,
             use_layer_norm=use_layer_norm,
+            effective_input_dim=effective_state_dim + effective_action_dim,
         )
 
     def forward(

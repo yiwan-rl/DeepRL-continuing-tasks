@@ -34,12 +34,13 @@ def actor_loss_fn(
         state,
         action_space_low,
         action_space_high,
+        action_space_mask,
     ):
     # Compute scalar actor loss for ONE experiment
     # state: (batch_size, state_dim)
     # actor_params: parameters for one experiment
 
-    action_batch = actor_network_instance.sample_action(state, actor_params, action_space_low, action_space_high)  # (batch_size, action_dim)
+    action_batch = actor_network_instance.sample_action(state, actor_params, action_space_low, action_space_high, action_space_mask)  # (batch_size, action_dim)
     # Critic ensemble forward pass
     q = torch.func.functional_call(critic_network_instance, critic_params, (state, action_batch))  # (batch_size)
 
@@ -61,11 +62,12 @@ def critic_loss_fn(
     discount_factor,
     action_space_low,
     action_space_high,
+    action_space_mask,
 ):
     # Compute scalar critic loss for ONE experiment
 
     with torch.no_grad():
-        next_action = actor_network_instance.sample_action(next_state, actor_target_params, action_space_low, action_space_high)  # (batch_size, action_dim)
+        next_action = actor_network_instance.sample_action(next_state, actor_target_params, action_space_low, action_space_high, action_space_mask)  # (batch_size, action_dim)
         next_q = torch.func.functional_call(critic_network_instance, critic_target_params, (next_state, next_action))  # (batch_size)
 
         expected_state_action_values = (
@@ -124,7 +126,16 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
         # Wrap grad with vmap to compute gradients per experiment
         self._actor_grad_fn = vmap(
             grad(actor_loss_fn, argnums=1),
-            in_dims=(None, 0, None, 0, 1, 0, 0),  # actor_network_instance, actor_params, critic_network_instance, critic_params, state, action_space_low, action_space_high
+            in_dims=(
+                None,  # actor_network_instance
+                0,  # actor_params
+                None,  # critic_network_instance
+                0,  # critic_params
+                1,  # state
+                0,  # action_space_low
+                0,  # action_space_high
+                0  # action_space_mask
+            ),
         )
         self._critic_grad_fn = vmap(
             grad(critic_loss_fn, argnums=3),
@@ -142,6 +153,7 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
                 None,  # discount_factor
                 0,  # action_space_low
                 0,  # action_space_high
+                0,  # action_space_mask
             ),
         )
 
@@ -156,6 +168,7 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
             batch.state,
             self._action_space.low,
             self._action_space.high,
+            self._action_space.mask,
         )
         return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)
 
@@ -174,5 +187,6 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
             self._discount_factor,
             self._action_space.low,
             self._action_space.high,
+            self._action_space.mask,
         )
         return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)

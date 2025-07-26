@@ -68,6 +68,7 @@ class NormalDistributionExploration(ExplorationModule):
 
         # scale noise according to the action space
         scaled_noise = noise_scaling(action_space.low, action_space.high, noise)
+        scaled_noise = scaled_noise * action_space.mask
         action = exploit_action + scaled_noise  # add noise
 
         # clip final action value to be within bounds of the action space

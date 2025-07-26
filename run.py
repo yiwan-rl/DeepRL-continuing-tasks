@@ -18,6 +18,14 @@ import subprocess
 import time
 from typing import Any, Dict, List, Optional, Tuple, Type
 
+# Add wandb import
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available. Install with: pip install wandb")
+
 # pyre-fixme
 import ale_py
 import gymnasium as gym
@@ -91,10 +99,10 @@ from pearl.user_envs.wrappers import (
     ReacherWrapper,
     SwimmerWrapper,
     AdditionalActionWrapper,
-    AgentResetWrapper,
-    EpisodicTaskAddCostWrapper,
-    EpisodicToContinuingWrapper,
-    RandomResetWrapper,
+    AgentTerminationWrapper,
+    IgnoreTerminationTruncationWrapper,
+    RandomTerminationWrapper,
+    ResetWrapper,
 )
 from pearl.utils.functional_utils.learning.preprocessing import (
     ObservationNormalization,
@@ -121,9 +129,46 @@ def set_seed(seed: int) -> None:
     torch.backends.cudnn.deterministic = True
     np.random.seed(seed)
 
+def init_wandb(param_sweeper_dict: Dict[str, Any]) -> None:
+    """Initialize wandb for experiment tracking."""
+    if not WANDB_AVAILABLE:
+        return
+    
+    # Extract relevant config for wandb
+    wandb_config = {}
+    
+    # Add learning parameters if available
+    for key, value in param_sweeper_dict.items():
+        if isinstance(value, int) or isinstance(value, float) or isinstance(value, str):
+            wandb_config[key] = value
+        else:
+            wandb_config[key] = str(value)
+    
+    # Initialize wandb
+    wandb.init(
+        project="deeprl-continuing-tasks",
+        name=f"{wandb_config['policy_learner:type']}",
+        config=wandb_config,
+        tags=[wandb_config['policy_learner:type']],
+        reinit=True
+    )
 
-def get_pearl_env(env_configs: List[Dict[str, Any]], batched: bool = True, num_processes: int = 2) -> GymEnvironment:
-    env_fns = [lambda cfg=cfg: get_env(cfg) for cfg in env_configs]  # capture cfg by default arg
+def log_to_wandb(metrics: Dict[str, Any], step: int) -> None:
+    """Log metrics to wandb."""
+    if WANDB_AVAILABLE and wandb.run is not None:
+        wandb.log(metrics, step=step)
+
+
+def get_pearl_env(
+        env_configs: List[Dict[str, Any]], 
+        batched: bool = True, 
+        num_processes: int = 2, 
+        num_runs: int = 10
+    ) -> GymEnvironment:
+    env_fns = []
+    for _ in range(num_runs):
+        for cfg in env_configs:
+            env_fns.append(lambda cfg=cfg: get_env(cfg))
     return GymEnvironment(env_fns, batched=batched, num_processes=num_processes)
 
 def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
@@ -132,11 +177,12 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
     """
     env=get_gym_env(env_config)
 
-    if env_config.get("random_reset_wrapper", False):
-        # create an evironment that randomly resets with a probability of reset_prob
-        env = RandomResetWrapper(
+    # the order of the wrappers is important, do you modify.
+    if env_config.get("random_termination_wrapper", False):
+        # create an evironment that terminates episodes with a probability of termination_prob
+        env = RandomTerminationWrapper(
             env=env,
-            reset_prob=env_config.get("reset_prob", None),
+            termination_prob=env_config.get("termination_prob", 0.0),
         )
 
     if env_config.get("additional_action_wrapper", False):
@@ -145,26 +191,25 @@ def get_env(env_config: Dict[str, Any]) -> GymEnvironment:
             env=env,
         )
 
-    if env_config.get("agent_reset_wrapper", False):
-        # this wrapper is used for learning resetting in continuing tasks. This wrapper should be used only when AdditionalActionWrapper is used.
-        env = AgentResetWrapper(
+    if env_config.get("agent_termination_wrapper", False):
+        # this wrapper is used for learning when to reset in continuing tasks. 
+        # This wrapper should be used only when AdditionalActionWrapper is used.
+        assert env_config.get("additional_action_wrapper", False), "AgentTerminationWrapper should be used only when AdditionalActionWrapper is used."
+        env = AgentTerminationWrapper(
             env=env,
-            reset_cost=env_config.get("reset_cost", None),
         )
-    if env_config.get("episodic_to_continuing_wrapper", False):
+    if env_config.get("reset_wrapper", False):
+        # this wrapper is used for resetting the environment when receiving a termination or truncation signal.
+        # it should be used for both any continuing and episodic tasks that send termination or truncation signals.
+        env = ResetWrapper(
+            env=env,
+            reset_cost=env_config.get("reset_cost", 0.0),
+        )
+    if env_config.get("ignore_termination_truncation_wrapper", False):
         # converting an episodic task to a continuing task. 
-        # An action that leads to a termination will immediately reset the environment and incur a cost.
-        env = EpisodicToContinuingWrapper(
-            env=env,
-            reset_cost=env_config.get("reset_cost", None),
-        )
-    
-    if env_config.get("episodic_task_add_cost_wrapper", False):
-        # adding a cost to the reward when the episode terminates. Only used for episodic tasks.
-        env = EpisodicTaskAddCostWrapper(
+        env = IgnoreTerminationTruncationWrapper(
             env=env,
         )
-
     return env
 
 
@@ -492,7 +537,7 @@ def run_episode(
     episode_steps = 0
     info = {}
     frames = []
-    while not done:
+    while all(done):
         if render:
             frames.append(env.render())
         # the agent takes an action
@@ -686,8 +731,25 @@ def train_episodic(
     save_data_dict.update(learning_report)
     save_as_npy(data=save_data_dict, output_dir=output_dir, run_idx=run_idx)
 
+def create_wandb_metrics(experiment_stats: Dict[str, Any], param_sweeper_dict: Dict[str, Any]) -> Dict[str, Any]:
+    average_reward_list = experiment_stats["avg_reward_list"]
+    wandb_metrics = {}
+    num_envs = len(param_sweeper_dict["env"])
+    num_runs = param_sweeper_dict["num_runs"]
+    print(len(average_reward_list))
+    for env_idx, env in enumerate(param_sweeper_dict["env"]):
+        env_name = env["env_name"]
+        wandb_metrics[f"{env_name}_average_reward"] = wandb.plot.line_series(
+            xs=np.arange(len(average_reward_list)),
+            ys=[[average_reward_record[run_idx * num_envs + env_idx] for average_reward_record in average_reward_list] for run_idx in range(num_runs)],
+            keys=[f"Run {run_idx}" for run_idx in range(param_sweeper_dict["num_runs"])],
+            title=f"Average Reward in {env_name}", 
+            xname="Step",
+        )
+    return wandb_metrics
 
-def train_continuing(
+
+def train(
     train_agent: PearlAgent,
     eval_continuing_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in a continuing environment
     eval_episodic_agent: PearlAgent,  # an agent sharing the same policy as train_agent, and will be evaluated in an episodic environment
@@ -696,7 +758,11 @@ def train_continuing(
     eval_episodic_env: Optional[GymEnvironment],
     param_sweeper_dict: Dict[str, Any],
 ) -> None:
+    """
+    Used for both continuing and episodic tasks.
+    """
     # get the parameters
+    train_env_is_continuing = param_sweeper_dict["train_env_is_continuing"]
     print_every_x_steps = param_sweeper_dict["print_every_x_steps"]
     learn_every_k_steps = param_sweeper_dict["learn_every_k_steps"]
     assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
@@ -712,15 +778,20 @@ def train_continuing(
     eval_in_continuing_env = param_sweeper_dict.get("eval_in_continuing_env", False)
     output_dir = param_sweeper_dict["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Initialize wandb
+    init_wandb(param_sweeper_dict)
 
     # record stats initialization
     experiment_stats = {
         "avg_reward_list": [],
+        "episodic_return_list": [],
         "eval_average_reward_list": [],
         "eval_episodic_return_list": [],
         "avg_reset_list": [],
         "eval_average_reset_list": [],
         "avg_clipped_reward_list": [],
+        "episodic_clipped_return_list": [],
         "eval_average_clipped_reward_list": [],
         "eval_episodic_clipped_return_list": [],
         "learning_report": {},
@@ -728,6 +799,7 @@ def train_continuing(
     }
 
     # variables used in the training loop but not recorded
+    # continuing tasks
     cum_reward = np.zeros(train_env.num_envs)
     cum_reset = np.zeros(train_env.num_envs)
     cum_clipped_reward = np.zeros(train_env.num_envs)
@@ -737,6 +809,19 @@ def train_continuing(
     last_cum_reset_record = np.zeros(train_env.num_envs)
     last_cum_clipped_reward_print = np.zeros(train_env.num_envs)
     last_cum_clipped_reward_record = np.zeros(train_env.num_envs)
+
+    # episodic tasks
+    episodic_return = np.zeros(train_env.num_envs)
+    episodic_clipped_return = np.zeros(train_env.num_envs)
+    cum_episodic_return = np.zeros(train_env.num_envs)
+    cum_episodes = np.zeros(train_env.num_envs)
+    cum_episodic_clipped_return = np.zeros(train_env.num_envs)
+    last_cum_episodic_return_print = np.zeros(train_env.num_envs)
+    last_cum_episodic_return_record = np.zeros(train_env.num_envs)
+    last_cum_episodes_print = np.zeros(train_env.num_envs)
+    last_cum_episodes_record = np.zeros(train_env.num_envs)
+    last_cum_episodic_clipped_return_print = np.zeros(train_env.num_envs)
+    last_cum_episodic_clipped_return_record = np.zeros(train_env.num_envs)
     learning_report_cache = {}
     last_timed_steps = 0
     steps = 0
@@ -774,7 +859,7 @@ def train_continuing(
             for preprocessor in preprocessors:
                 observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
             clipped_reward = reward
-            num_resets = sum([i.get("num_resets", 0) for i in info])
+            num_resets = np.array([i.get("num_resets", 0) for i in info])
 
             steps += 1
 
@@ -783,9 +868,18 @@ def train_continuing(
 
             
             # update stats
-            cum_reward = cum_reward + original_reward
             cum_reset = cum_reset + num_resets
-            cum_clipped_reward = cum_clipped_reward + clipped_reward
+            if train_env_is_continuing:
+                cum_reward = cum_reward + original_reward
+                cum_clipped_reward = cum_clipped_reward + clipped_reward
+            else:
+                episodic_return += original_reward
+                episodic_clipped_return += clipped_reward
+                cum_episodic_return = cum_episodic_return + episodic_return * np.logical_or(terminated, truncated)
+                cum_episodes = cum_episodes + np.logical_or(terminated, truncated)
+                cum_episodic_clipped_return = cum_episodic_clipped_return + episodic_clipped_return * np.logical_or(terminated, truncated)
+                episodic_return[np.logical_or(terminated, truncated)] = 0
+                episodic_clipped_return[np.logical_or(terminated, truncated)] = 0
             for key in report:
                 learning_report_cache.setdefault(key, []).append(report[key])
 
@@ -801,14 +895,21 @@ def train_continuing(
                     if "critic_loss" in learning_report_cache
                     else None
                 )
-                message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
-                last_cum_clipped_reward_print = cum_clipped_reward
-                last_cum_reward_print = cum_reward
+                if train_env_is_continuing:
+                    message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+                    last_cum_clipped_reward_print = cum_clipped_reward
+                    last_cum_reward_print = cum_reward
+                else:
+                    message = f"steps {steps}, agent={train_agent}, env={train_env}, episodic_return={(cum_episodic_return - last_cum_episodic_return_print) / (cum_episodes - last_cum_episodes_print)}, episodic_clipped_return={(cum_episodic_clipped_return - last_cum_episodic_clipped_return_print) / (cum_episodes - last_cum_episodes_print)}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+                    last_cum_episodic_return_print = cum_episodic_return
+                    last_cum_episodes_print = cum_episodes
+                    last_cum_episodic_clipped_return_print = cum_episodic_clipped_return
                 last_cum_reset_print = cum_reset
                 end_time = time.time()
                 SPS = int((steps - last_timed_steps) / (end_time - start_time))
                 logger.info(f"samples per second: {SPS}")
                 logger.info(message)
+                
                 start_time = end_time
                 last_timed_steps = steps
 
@@ -818,23 +919,35 @@ def train_continuing(
 
             # record stats
             if steps % record_period == 0:
-                # record the average reward over the last record_period time steps
-                experiment_stats["avg_reward_list"].append(
-                    (cum_reward - last_cum_reward_record) / record_period
-                )
-                last_cum_reward_record = cum_reward
-
                 # record the average reset over the last record_period time steps
                 experiment_stats["avg_reset_list"].append((
                     cum_reset - last_cum_reset_record) / record_period
                 )
                 last_cum_reset_record = cum_reset
+                if train_env_is_continuing:
+                    # record the average reward over the last record_period time steps
+                    experiment_stats["avg_reward_list"].append(
+                        (cum_reward - last_cum_reward_record) / record_period
+                    )
+                    last_cum_reward_record = cum_reward
 
-                # record the average clipped reward over the last record_period time steps
-                experiment_stats["avg_clipped_reward_list"].append(
-                    (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
-                )
-                last_cum_clipped_reward_record = cum_clipped_reward
+                    # record the average clipped reward over the last record_period time steps
+                    experiment_stats["avg_clipped_reward_list"].append(
+                        (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
+                    )
+                    last_cum_clipped_reward_record = cum_clipped_reward
+                else:
+                    # record the average episodic return over the last record_period time steps
+                    experiment_stats["episodic_return_list"].append(
+                        (cum_episodic_return - last_cum_episodic_return_record) / (cum_episodes - last_cum_episodes_record)
+                    )
+                    # record the average episodic clipped return over the last record_period time steps
+                    experiment_stats["episodic_clipped_return_list"].append(
+                        (cum_episodic_clipped_return - last_cum_episodic_clipped_return_record) / (cum_episodes - last_cum_episodes_record)
+                    )
+                    last_cum_episodic_return_record = cum_episodic_return
+                    last_cum_episodic_clipped_return_record = cum_episodic_clipped_return
+                    last_cum_episodes_record = cum_episodes
 
                 # evaluate the learned policy in an episodic and a continuing versions of the environment
                 if eval_in_episodic_env:
@@ -878,6 +991,22 @@ def train_continuing(
                 if eval_average_reset is not None:
                     experiment_stats["eval_average_reset_list"].append(eval_average_reset)
 
+                # Log evaluation metrics to wandb
+                eval_metrics = {}
+                if eval_episodic_return is not None:
+                    eval_metrics["eval_episodic_return"] = eval_episodic_return
+                if eval_average_reward is not None:
+                    eval_metrics["eval_average_reward"] = eval_average_reward
+                if eval_episodic_clipped_return is not None:
+                    eval_metrics["eval_episodic_clipped_return"] = eval_episodic_clipped_return
+                if eval_average_clipped_reward is not None:
+                    eval_metrics["eval_average_clipped_reward"] = eval_average_clipped_reward
+                if eval_average_reset is not None:
+                    eval_metrics["eval_average_reset"] = eval_average_reset
+                
+                wandb_metrics = create_wandb_metrics(experiment_stats, param_sweeper_dict)
+                log_to_wandb(wandb_metrics, steps)
+
                 # record stats in learning report
                 for key in learning_report_cache:
                     experiment_stats["learning_report"].setdefault(key, []).append(
@@ -887,8 +1016,10 @@ def train_continuing(
     # save all the recorded stats
     save_data_dict = {
         "average_reward": experiment_stats["avg_reward_list"],
+        "episodic_return": experiment_stats["episodic_return_list"],
         "average_reset": experiment_stats["avg_reset_list"],
         "average_clipped_reward": experiment_stats["avg_clipped_reward_list"],
+        "episodic_clipped_return": experiment_stats["episodic_clipped_return_list"],
         "eval_episodic_return": experiment_stats["eval_episodic_return_list"],
         "eval_average_reward": experiment_stats["eval_average_reward_list"],
         "eval_average_reset": experiment_stats["eval_average_reset_list"],
@@ -1041,9 +1172,9 @@ if __name__ == "__main__":
             continue
         if args.render:
             param_sweeper_dict[envs_configs[i]][0]["render_mode"] = "rgb_array"
-            env = get_pearl_env(param_sweeper_dict[envs_configs[i]])
+            env = get_pearl_env(param_sweeper_dict[envs_configs[i]], num_runs=param_sweeper_dict["num_runs"])
         else:
-            env = get_pearl_env(param_sweeper_dict[envs_configs[i]])
+            env = get_pearl_env(param_sweeper_dict[envs_configs[i]], num_runs=param_sweeper_dict["num_runs"])
         env.reset(seed=run_id)
         envs.append(env)
         if i == 1 or i == 2:
@@ -1211,7 +1342,8 @@ if __name__ == "__main__":
             actor_networks, param_sweeper_dict["actor_network_instance:type"]
         )
         actor_network_instances = []
-        for i in range(len(param_sweeper_dict["env"])):
+        for i in range(len(param_sweeper_dict["env"]) * param_sweeper_dict["num_runs"]):
+            param_sweeper_dict["actor_network_instance:effective_input_dim"] = env.observation_space.actual_sizes[i]
             actor_network_instances.append(init_class(actor_class, "actor_network_instance", param_sweeper_dict))
         param_sweeper_dict["actor_network_instances"] = nn.ModuleList(actor_network_instances)
         param_sweeper_dict["actor_network_instance"] = init_class(actor_class, "actor_network_instance", param_sweeper_dict)
@@ -1305,7 +1437,13 @@ if __name__ == "__main__":
             )
         else:
             raise NotImplementedError
-        critic_network_instances = nn.ModuleList([init_class(critic_class, "critic_network_instance", param_sweeper_dict) for _ in range(len(param_sweeper_dict["env"]))])
+    
+        critic_network_instances = []
+        for i in range(len(param_sweeper_dict["env"]) * param_sweeper_dict["num_runs"]):
+            param_sweeper_dict["critic_network_instance:effective_state_dim"] = env.observation_space.actual_sizes[i]
+            param_sweeper_dict["critic_network_instance:effective_action_dim"] = env.action_space.actual_sizes[i]
+            critic_network_instances.append(init_class(critic_class, "critic_network_instance", param_sweeper_dict))
+        critic_network_instances = nn.ModuleList(critic_network_instances)
         param_sweeper_dict["critic_network_instances"] = critic_network_instances
 
     if param_sweeper_dict.get("reward_centering:type", None) is not None:
@@ -1515,28 +1653,15 @@ if __name__ == "__main__":
         eval_continuing_agent: PearlAgent = train_agent
         eval_episodic_agent: PearlAgent = train_agent
 
-        if param_sweeper_dict.get(
-            "train_env_is_continuing", False
-        ):
-            train_continuing(
-                train_agent, 
-                eval_continuing_agent, 
-                eval_episodic_agent, 
-                train_env, 
-                eval_continuing_env, 
-                eval_episodic_env, 
-                param_sweeper_dict
-            )
-        else:
-            train_episodic(
-                train_agent, 
-                eval_continuing_agent, 
-                eval_episodic_agent, 
-                train_env, 
-                eval_continuing_env, 
-                eval_episodic_env, 
-                param_sweeper_dict
-            )
+        train(
+            train_agent, 
+            eval_continuing_agent, 
+            eval_episodic_agent, 
+            train_env, 
+            eval_continuing_env, 
+            eval_episodic_env, 
+            param_sweeper_dict
+        )
 
         if param_sweeper_dict["save_model"]:
             assert (

@@ -11,15 +11,15 @@ from .atari_wrappers import EpisodicLifeEnv, FireResetEnv, MaxAndSkipEnv, NoopRe
 from .halfcheetah_wrapper import HalfCheetahWrapper  # noqa
 from .pusher_wrapper import PusherWrapper  # noqa
 from .reacher_wrapper import ReacherWrapper  # noqa
-from .reset_wrapper import AdditionalActionWrapper, AgentResetWrapper, EpisodicToContinuingWrapper, EpisodicTaskAddCostWrapper, RandomResetWrapper  # noqa
+from .reset_wrapper import AdditionalActionWrapper, AgentTerminationWrapper, IgnoreTerminationTruncationWrapper, RandomTerminationWrapper, ResetWrapper  # noqa
 from .swimmer_wrapper import SwimmerWrapper  # noqa
 
 __all__ = [
     "AdditionalActionWrapper",
-    "AgentResetWrapper",
-    "EpisodicToContinuingWrapper",
-    "EpisodicTaskAddCostWrapper",
-    "RandomResetWrapper",
+    "AgentTerminationWrapper",
+    "IgnoreTerminationTruncationWrapper",
+    "RandomTerminationWrapper",
+    "ResetWrapper",
     "HalfCheetahWrapper",
     "ReacherWrapper",
     "PusherWrapper",
