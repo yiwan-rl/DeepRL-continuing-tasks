@@ -12,10 +12,6 @@ from typing import Any, Dict, Optional, Union
 import torch
 from pearl.utils.instantiations.spaces import VectorDiscreteSpace
 
-from pearl.neural_networks.sequential_decision_making.q_value_networks import (
-    EnsembleQValueNetwork,
-
-)
 from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )

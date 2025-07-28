@@ -38,7 +38,9 @@ def action_scaling(
     Note: the action space is not assumed to be symmetric (low = -high).
 
     Args:
-        input_action: the input action vector to be scaled
+        action_space_low: the action space low, shape (action_dim)
+        action_space_high: the action space high, shape (action_dim)
+        input_action: the input action vector to be scaled, shape (batch_size, action_dim)
     Returns:
         scaled_action: centered and scaled input action vector, according to the action space
     """
@@ -328,6 +330,7 @@ class VanillaContinuousActorNetwork(nn.Module):
             self, 
             x: torch.Tensor, 
             params: torch.Tensor, 
+            buffers: torch.Tensor,
             action_space_low: torch.Tensor, 
             action_space_high: torch.Tensor, 
             action_space_mask: torch.Tensor,
@@ -339,7 +342,7 @@ class VanillaContinuousActorNetwork(nn.Module):
         Returns:
             action: sampled action, scaled to the action space bounds
         """
-        normalized_action = torch.func.functional_call(self, params, (x))
+        normalized_action = torch.func.functional_call(self, (params, buffers), (x))
         action = action_scaling(action_space_low, action_space_high, normalized_action)
         action = action * action_space_mask
         return action

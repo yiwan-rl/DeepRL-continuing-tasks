@@ -123,50 +123,6 @@ class VanillaQValueMultiHeadNetwork(nn.Module):
 
 
 
-class EnsembleQValueNetwork(nn.Module):
-    r"""A Q-value network that uses the `Ensemble` model."""
-
-    def __init__(
-        self,
-        models: List[nn.Module],
-        ensemble_size: int,
-    ) -> None:
-        super().__init__()
-        self.models = models
-        self.ensemble_size = ensemble_size
-
-    def get_q_values(
-        self,
-        state_batch: Tensor,
-        action_batch: Tensor,
-        z: Optional[int] = None,
-        get_all_values: bool = False,
-    ) -> Tensor:
-        if get_all_values:
-            qs = []
-            for i in range(self.ensemble_size):
-                qs.append(
-                    self.models[i].get_q_values(
-                        state_batch=state_batch, action_batch=action_batch
-                    )  # (batch_size x number_of_actions_to_query) or (batch_size)
-                )
-            return torch.stack(
-                qs
-            )  # (ensemble size x batch_size x number_of_actions_to_query) or (ensemble size x batch_size)
-        else:
-            assert z is not None
-            return self.models[z].get_q_values(
-                state_batch=state_batch, action_batch=action_batch
-            )  # (batch_size x number_of_actions_to_query) or (batch_size)
-
-    @property
-    def state_dim(self) -> int:
-        return self._state_dim
-
-    @property
-    def action_dim(self) -> int:
-        return self._action_dim
-
 
 class CNNQValueNetwork(nn.Module):
     """

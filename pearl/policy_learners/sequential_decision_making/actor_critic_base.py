@@ -9,7 +9,7 @@
 
 import copy
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, Optional
 import torchopt
 import torch
 
@@ -29,8 +29,9 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 from pearl.utils.instantiations.spaces.discrete import VectorDiscreteSpace
 from pearl.utils.instantiations.spaces.box import VectorBoxSpace
-from torch import nn, optim
+from torch import nn
 from torch import vmap
+from torch.func import stack_module_state
 
 class ActorCriticBase(PolicyLearner):
     """
@@ -79,15 +80,16 @@ class ActorCriticBase(PolicyLearner):
         Constructs a base actor-critic policy learner.
         """
 
+        # Reshape batched params and buffers from (80, ...) to (10, 8, ...)
+        def reshape_batched(batched):
+            return batched.reshape(len(actor_network_instances), ensemble_critic_size, *batched.shape[1:])
+
         self._use_actor_target = use_actor_target
         self._use_critic_target = use_critic_target
 
         self._actor: nn.Module = actor_network_instances[0]
-        actor_param_list = [dict(actor_network_instance.named_parameters()) for actor_network_instance in actor_network_instances]
-        self._actor_params = {
-            k: torch.stack([params[k] for params in actor_param_list], dim=0)
-            for k in actor_param_list[0]
-        }
+        # Stack parameters and buffers into batched state
+        self._actor_params, self._actor_buffers = stack_module_state(actor_network_instances)  # NamedTuple(params, buffers)
         self._actor_optimizer = actor_optimizer
         self._actor_optimizer_state = self._actor_optimizer.init(self._actor_params)
         self._actor_target_update_freq = actor_target_update_freq
@@ -96,20 +98,25 @@ class ActorCriticBase(PolicyLearner):
         # make a copy of the actor network to be used as the actor target network
         if self._use_actor_target:
             self._actor_target_params = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._actor_params)
-
+            self._actor_target_buffers = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._actor_buffers)
 
         self._critic_target_update_freq = critic_target_update_freq
         self._critic_soft_update_tau = critic_soft_update_tau
         self._critic: nn.Module = critic_network_instances[0]
-        critic_param_list = [dict(critic_network_instance.named_parameters()) for critic_network_instance in critic_network_instances]
-        self._critic_params = {
-            k: torch.stack([params[k] for params in critic_param_list], dim=0)
-            for k in critic_param_list[0]
-        }
+
+        # Stack parameters and buffers into batched state
+        self._critic_params, self._critic_buffers = stack_module_state(critic_network_instances)  # NamedTuple(params, buffers)
+
+        if ensemble_critic_size > 1:
+            # reshape every critic parameter and buffer to (num_exps, ensemble_critic_size, ...)
+            self._critic_params = {k: reshape_batched(v) for k, v in self._critic_params.items()}
+            self._critic_buffers = {k: reshape_batched(v) for k, v in self._critic_buffers.items()}
+
         self._critic_optimizer = critic_optimizer
         self._critic_optimizer_state = self._critic_optimizer.init(self._critic_params)
         if self._use_critic_target:
             self._critic_target_params = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._critic_params)
+            self._critic_target_buffers = torch.utils._pytree.tree_map(lambda p: p.clone().detach().requires_grad_(False), self._critic_buffers)
 
         self._discount_factor = discount_factor
         self._current_steps = 0
@@ -148,8 +155,8 @@ class ActorCriticBase(PolicyLearner):
         with torch.no_grad():
             if self._is_action_continuous:
                 exploit_action = vmap(
-                    lambda x, params, low, high, mask : self._actor.sample_action(x, params, low, high, mask)
-                )(subjective_state, self._actor_params, self._action_space.low, self._action_space.high, self._action_space.mask)
+                    lambda x, params, buffers, low, high, mask : self._actor.sample_action(x, params, buffers, low, high, mask)
+                )(subjective_state, self._actor_params, self._actor_buffers, self._action_space.low, self._action_space.high, self._action_space.mask)
                 action_probabilities = None
             else:
                 action_probabilities = self._actor.get_policy_distribution(
@@ -269,8 +276,14 @@ class ActorCriticBase(PolicyLearner):
     def to(self, device: torch.device) -> None:
         super().to(device)
         self._actor_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_params)
+        self._actor_buffers = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_buffers)
         self._critic_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_params)
-        self._actor_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_target_params)
-        self._critic_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_target_params)
+        self._critic_buffers = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_buffers)
+        if self._use_actor_target:
+            self._actor_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_target_params)
+            self._actor_target_buffers = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_target_buffers)
+        if self._use_critic_target:
+            self._critic_target_params = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_target_params)
+            self._critic_target_buffers = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_target_buffers)
         self._actor_optimizer_state = torch.utils._pytree.tree_map(lambda p: p.to(device), self._actor_optimizer_state)
         self._critic_optimizer_state = torch.utils._pytree.tree_map(lambda p: p.to(device), self._critic_optimizer_state)

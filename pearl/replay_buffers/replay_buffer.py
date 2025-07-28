@@ -51,7 +51,6 @@ class ReplayBuffer(ABC):
         obs: Observation,
         action: Action,
         reward: Reward,
-        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:

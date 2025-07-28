@@ -733,17 +733,25 @@ def train_episodic(
 
 def create_wandb_metrics(experiment_stats: Dict[str, Any], param_sweeper_dict: Dict[str, Any]) -> Dict[str, Any]:
     average_reward_list = experiment_stats["avg_reward_list"]
+    episodic_return_list = experiment_stats["episodic_return_list"]
     wandb_metrics = {}
     num_envs = len(param_sweeper_dict["env"])
     num_runs = param_sweeper_dict["num_runs"]
-    print(len(average_reward_list))
     for env_idx, env in enumerate(param_sweeper_dict["env"]):
         env_name = env["env_name"]
-        wandb_metrics[f"{env_name}_average_reward"] = wandb.plot.line_series(
+        tag = env["tag"]
+        wandb_metrics[f"{env_name}_{tag}_average_reward"] = wandb.plot.line_series(
             xs=np.arange(len(average_reward_list)),
             ys=[[average_reward_record[run_idx * num_envs + env_idx] for average_reward_record in average_reward_list] for run_idx in range(num_runs)],
             keys=[f"Run {run_idx}" for run_idx in range(param_sweeper_dict["num_runs"])],
-            title=f"Average Reward in {env_name}", 
+            title=f"Average Reward in {env_name} ({tag})", 
+            xname="Step",
+        )
+        wandb_metrics[f"{env_name}_{tag}_episodic_return"] = wandb.plot.line_series(
+            xs=np.arange(len(episodic_return_list)),
+            ys=[[episodic_return_record[run_idx * num_envs + env_idx] for episodic_return_record in episodic_return_list] for run_idx in range(num_runs)],
+            keys=[f"Run {run_idx}" for run_idx in range(param_sweeper_dict["num_runs"])],
+            title=f"Episodic Return in {env_name} ({tag})", 
             xname="Step",
         )
     return wandb_metrics
@@ -762,7 +770,6 @@ def train(
     Used for both continuing and episodic tasks.
     """
     # get the parameters
-    train_env_is_continuing = param_sweeper_dict["train_env_is_continuing"]
     print_every_x_steps = param_sweeper_dict["print_every_x_steps"]
     learn_every_k_steps = param_sweeper_dict["learn_every_k_steps"]
     assert learn_every_k_steps > 0, "learn_every_k_steps must be positive"
@@ -869,17 +876,15 @@ def train(
             
             # update stats
             cum_reset = cum_reset + num_resets
-            if train_env_is_continuing:
-                cum_reward = cum_reward + original_reward
-                cum_clipped_reward = cum_clipped_reward + clipped_reward
-            else:
-                episodic_return += original_reward
-                episodic_clipped_return += clipped_reward
-                cum_episodic_return = cum_episodic_return + episodic_return * np.logical_or(terminated, truncated)
-                cum_episodes = cum_episodes + np.logical_or(terminated, truncated)
-                cum_episodic_clipped_return = cum_episodic_clipped_return + episodic_clipped_return * np.logical_or(terminated, truncated)
-                episodic_return[np.logical_or(terminated, truncated)] = 0
-                episodic_clipped_return[np.logical_or(terminated, truncated)] = 0
+            cum_reward = cum_reward + original_reward
+            cum_clipped_reward = cum_clipped_reward + clipped_reward
+            episodic_return += original_reward
+            episodic_clipped_return += clipped_reward
+            cum_episodic_return = cum_episodic_return + episodic_return * np.logical_or(terminated, truncated)
+            cum_episodes = cum_episodes + np.logical_or(terminated, truncated)
+            cum_episodic_clipped_return = cum_episodic_clipped_return + episodic_clipped_return * np.logical_or(terminated, truncated)
+            episodic_return[np.logical_or(terminated, truncated)] = 0
+            episodic_clipped_return[np.logical_or(terminated, truncated)] = 0
             for key in report:
                 learning_report_cache.setdefault(key, []).append(report[key])
 
@@ -895,15 +900,17 @@ def train(
                     if "critic_loss" in learning_report_cache
                     else None
                 )
-                if train_env_is_continuing:
-                    message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={(cum_reward - last_cum_reward_print) / print_every_x_steps}, average_clipped_reward={(cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
-                    last_cum_clipped_reward_print = cum_clipped_reward
-                    last_cum_reward_print = cum_reward
-                else:
-                    message = f"steps {steps}, agent={train_agent}, env={train_env}, episodic_return={(cum_episodic_return - last_cum_episodic_return_print) / (cum_episodes - last_cum_episodes_print)}, episodic_clipped_return={(cum_episodic_clipped_return - last_cum_episodic_clipped_return_print) / (cum_episodes - last_cum_episodes_print)}, average_reset={(cum_reset - last_cum_reset_print) / print_every_x_steps}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
-                    last_cum_episodic_return_print = cum_episodic_return
-                    last_cum_episodes_print = cum_episodes
-                    last_cum_episodic_clipped_return_print = cum_episodic_clipped_return
+                avg_reward_to_print = (cum_reward - last_cum_reward_print) / print_every_x_steps
+                avg_clipped_reward_to_print = (cum_clipped_reward - last_cum_clipped_reward_print) / print_every_x_steps
+                avg_episodic_return_to_print = (cum_episodic_return - last_cum_episodic_return_print) / (cum_episodes - last_cum_episodes_print + 1e-8)
+                avg_episodic_clipped_return_to_print = (cum_episodic_clipped_return - last_cum_episodic_clipped_return_print) / (cum_episodes - last_cum_episodes_print + 1e-8)
+                avg_reset_to_print = (cum_reset - last_cum_reset_print) / print_every_x_steps
+                message = f"steps {steps}, agent={train_agent}, env={train_env}, average_reward={avg_reward_to_print}, average_clipped_reward={avg_clipped_reward_to_print},  episodic_return={avg_episodic_return_to_print}, episodic_clipped_return={avg_episodic_clipped_return_to_print}, average_reset={avg_reset_to_print}, actor_loss = {actor_loss}, critic_loss = {critic_loss}"
+                last_cum_clipped_reward_print = cum_clipped_reward
+                last_cum_reward_print = cum_reward
+                last_cum_episodic_return_print = cum_episodic_return
+                last_cum_episodes_print = cum_episodes
+                last_cum_episodic_clipped_return_print = cum_episodic_clipped_return
                 last_cum_reset_print = cum_reset
                 end_time = time.time()
                 SPS = int((steps - last_timed_steps) / (end_time - start_time))
@@ -924,30 +931,28 @@ def train(
                     cum_reset - last_cum_reset_record) / record_period
                 )
                 last_cum_reset_record = cum_reset
-                if train_env_is_continuing:
-                    # record the average reward over the last record_period time steps
-                    experiment_stats["avg_reward_list"].append(
-                        (cum_reward - last_cum_reward_record) / record_period
-                    )
-                    last_cum_reward_record = cum_reward
+                # record the average reward over the last record_period time steps
+                experiment_stats["avg_reward_list"].append(
+                    (cum_reward - last_cum_reward_record) / record_period
+                )
+                last_cum_reward_record = cum_reward
 
-                    # record the average clipped reward over the last record_period time steps
-                    experiment_stats["avg_clipped_reward_list"].append(
-                        (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
-                    )
-                    last_cum_clipped_reward_record = cum_clipped_reward
-                else:
-                    # record the average episodic return over the last record_period time steps
-                    experiment_stats["episodic_return_list"].append(
-                        (cum_episodic_return - last_cum_episodic_return_record) / (cum_episodes - last_cum_episodes_record)
-                    )
-                    # record the average episodic clipped return over the last record_period time steps
-                    experiment_stats["episodic_clipped_return_list"].append(
-                        (cum_episodic_clipped_return - last_cum_episodic_clipped_return_record) / (cum_episodes - last_cum_episodes_record)
-                    )
-                    last_cum_episodic_return_record = cum_episodic_return
-                    last_cum_episodic_clipped_return_record = cum_episodic_clipped_return
-                    last_cum_episodes_record = cum_episodes
+                # record the average clipped reward over the last record_period time steps
+                experiment_stats["avg_clipped_reward_list"].append(
+                    (cum_clipped_reward - last_cum_clipped_reward_record) / record_period
+                )
+                last_cum_clipped_reward_record = cum_clipped_reward
+                # record the average episodic return over the last record_period time steps
+                experiment_stats["episodic_return_list"].append(
+                    (cum_episodic_return - last_cum_episodic_return_record) / (cum_episodes - last_cum_episodes_record + 1e-8)
+                )
+                # record the average episodic clipped return over the last record_period time steps
+                experiment_stats["episodic_clipped_return_list"].append(
+                    (cum_episodic_clipped_return - last_cum_episodic_clipped_return_record) / (cum_episodes - last_cum_episodes_record + 1e-8)
+                )
+                last_cum_episodic_return_record = cum_episodic_return
+                last_cum_episodic_clipped_return_record = cum_episodic_clipped_return
+                last_cum_episodes_record = cum_episodes
 
                 # evaluate the learned policy in an episodic and a continuing versions of the environment
                 if eval_in_episodic_env:
@@ -1004,14 +1009,16 @@ def train(
                 if eval_average_reset is not None:
                     eval_metrics["eval_average_reset"] = eval_average_reset
                 
-                wandb_metrics = create_wandb_metrics(experiment_stats, param_sweeper_dict)
-                log_to_wandb(wandb_metrics, steps)
 
                 # record stats in learning report
                 for key in learning_report_cache:
                     experiment_stats["learning_report"].setdefault(key, []).append(
                         np.mean(learning_report_cache[key])
                     )
+                
+                print("log to wandb")
+                wandb_metrics = create_wandb_metrics(experiment_stats, param_sweeper_dict)
+                log_to_wandb(wandb_metrics, steps)
 
     # save all the recorded stats
     save_data_dict = {
@@ -1172,9 +1179,8 @@ if __name__ == "__main__":
             continue
         if args.render:
             param_sweeper_dict[envs_configs[i]][0]["render_mode"] = "rgb_array"
-            env = get_pearl_env(param_sweeper_dict[envs_configs[i]], num_runs=param_sweeper_dict["num_runs"])
-        else:
-            env = get_pearl_env(param_sweeper_dict[envs_configs[i]], num_runs=param_sweeper_dict["num_runs"])
+
+        env = get_pearl_env(param_sweeper_dict[envs_configs[i]], num_runs=param_sweeper_dict["num_runs"], num_processes=param_sweeper_dict["num_processes"])
         env.reset(seed=run_id)
         envs.append(env)
         if i == 1 or i == 2:
@@ -1221,12 +1227,14 @@ if __name__ == "__main__":
         if "exploration_module:std_dev" in param_sweeper_dict and isinstance(
             param_sweeper_dict["exploration_module:std_dev"], list
         ):
+            for e in param_sweeper_dict["env"]:
+                assert e.get("additional_action_wrapper", False), "additional_action_wrapper must be true when exploration_module:std_dev provides two values for regular actions and the termination action"
             # if std_dev is specified and has two values, the first value is the noise for all dimensions, except the last dimension, and the second value is the noise for the last dimension
             assert isinstance(env.action_space, VectorBoxSpace)
             assert len(param_sweeper_dict["exploration_module:std_dev"]) == 2
             tmp: torch.Tensor = (
                 torch.ones(
-                    train_env.action_space.action_dim
+                    train_env.action_space.element_dim()
                 )
                 * param_sweeper_dict["exploration_module:std_dev"][0]
             )
@@ -1253,19 +1261,23 @@ if __name__ == "__main__":
     else:
         param_sweeper_dict["exploration_module"] = NoExploration()
 
-    if "actor_update_noise" in param_sweeper_dict and isinstance(
-        param_sweeper_dict["actor_update_noise"], list
+    if "actor_noise_std" in param_sweeper_dict and isinstance(
+        param_sweeper_dict["actor_noise_std"], list
     ):
+        # for TD3
+        assert param_sweeper_dict["policy_learner:type"] == "TD3"
+        for e in param_sweeper_dict["env"]:
+            assert e.get("additional_action_wrapper", False), "additional_action_wrapper must be true when actor_noise_std provides two values for regular actions and the termination action"
         assert isinstance(env.action_space, VectorBoxSpace)
-        assert len(param_sweeper_dict["actor_update_noise"]) == 2
+        assert len(param_sweeper_dict["actor_noise_std"]) == 2
         tmp = (
             torch.ones(
-                train_env.action_space.action_dim
+                train_env.action_space.element_dim()
             )
-            * param_sweeper_dict["actor_update_noise"][0]
+            * param_sweeper_dict["actor_noise_std"][0]
         )
-        tmp[-1] = param_sweeper_dict["actor_update_noise"][1]
-        param_sweeper_dict["actor_update_noise"] = tmp
+        tmp[-1] = param_sweeper_dict["actor_noise_std"][1]
+        param_sweeper_dict["actor_noise_std"] = tmp
 
     """
     Initialize replay buffer
@@ -1346,7 +1358,6 @@ if __name__ == "__main__":
             param_sweeper_dict["actor_network_instance:effective_input_dim"] = env.observation_space.actual_sizes[i]
             actor_network_instances.append(init_class(actor_class, "actor_network_instance", param_sweeper_dict))
         param_sweeper_dict["actor_network_instances"] = nn.ModuleList(actor_network_instances)
-        param_sweeper_dict["actor_network_instance"] = init_class(actor_class, "actor_network_instance", param_sweeper_dict)
 
     if "critic_network_instance:type" in param_sweeper_dict:
         # if critic network is specified, intialize one
@@ -1362,6 +1373,15 @@ if __name__ == "__main__":
             param_sweeper_dict["critic_network_instance:action_dim"] = (
                 env.action_space.element_dim()
             )
+            critic_network_instances = []
+
+            for i in range(len(param_sweeper_dict["env"]) * param_sweeper_dict["num_runs"]):
+                for _ in range(param_sweeper_dict.get("ensemble_critic_size", 1)):
+                    param_sweeper_dict["critic_network_instance:effective_state_dim"] = env.observation_space.actual_sizes[i]
+                    param_sweeper_dict["critic_network_instance:effective_action_dim"] = env.action_space.actual_sizes[i]
+                    critic_network_instances.append(init_class(critic_class, "critic_network_instance", param_sweeper_dict))
+            critic_network_instances = nn.ModuleList(critic_network_instances)
+            param_sweeper_dict["critic_network_instances"] = critic_network_instances
         elif param_sweeper_dict["critic_network_instance:type"] in [
             "VanillaValueNetwork",
         ]:
@@ -1382,69 +1402,9 @@ if __name__ == "__main__":
             param_sweeper_dict["critic_network_instance:input_height"] = 84
             param_sweeper_dict["critic_network_instance:input_channels_count"] = 4
             param_sweeper_dict["critic_network_instance"] = init_class(critic_class, "critic_network_instance", param_sweeper_dict)
-        elif param_sweeper_dict["critic_network_instance:type"] in [
-            "EnsembleQValueNetwork",
-        ]:
-            list_of_member_networks: List[nn.Module] = []
-            ensemble_size: int = param_sweeper_dict[
-                "critic_network_instance:ensemble_size"
-            ]
-            for _ in range(ensemble_size):
-                if param_sweeper_dict["critic_member_network:type"] in [
-                    "CNNQValueNetwork",
-                    "CNNQValueMultiHeadNetwork",
-                ]:
-                    # image based inputs
-                    assert len(env.observation_space.shape) == 3
-                    param_sweeper_dict["critic_member_network:input_width"] = 84
-                    param_sweeper_dict["critic_member_network:input_height"] = 84
-                    param_sweeper_dict["critic_member_network:input_channels_count"] = 4
-                elif param_sweeper_dict["critic_member_network:type"] in [
-                    "VanillaQValueNetwork",
-                    "VanillaQValueMultiHeadNetwork",
-                ]:
-                    # vector based inputs
-                    assert len(env.observation_space.shape) == 1
-                    param_sweeper_dict["critic_member_network:state_dim"] = (
-                        env.observation_space.element_dim()
-                    )
-                else:
-                    raise NotImplementedError
-                param_sweeper_dict["critic_member_network:action_dim"] = (
-                    env.action_space.action_dim
-                )
-                member_network_class = getattr(
-                    q_value_networks,
-                    param_sweeper_dict["critic_member_network:type"],
-                )
-                filtered_dict = {}
-                for key, value in param_sweeper_dict.items():
-                    prefix = "critic_member_network:"
-                    if (
-                        len(key) > len(prefix)
-                        and prefix == key[0 : len(prefix)]
-                        and key[len(prefix) :] != "type"
-                    ):
-                        filtered_dict[key[len(prefix) :]] = value
-                list_of_member_networks.append(member_network_class(**filtered_dict))
-            models: nn.ModuleList = nn.ModuleList(list_of_member_networks)
-            critic_class: Type[nn.Module] = getattr(
-                q_value_networks, param_sweeper_dict["critic_network_instance:type"]
-            )
-            # pyre-fixme
-            param_sweeper_dict["critic_network_instance"] = critic_class(
-                models=models, ensemble_size=ensemble_size
-            )
         else:
             raise NotImplementedError
-    
-        critic_network_instances = []
-        for i in range(len(param_sweeper_dict["env"]) * param_sweeper_dict["num_runs"]):
-            param_sweeper_dict["critic_network_instance:effective_state_dim"] = env.observation_space.actual_sizes[i]
-            param_sweeper_dict["critic_network_instance:effective_action_dim"] = env.action_space.actual_sizes[i]
-            critic_network_instances.append(init_class(critic_class, "critic_network_instance", param_sweeper_dict))
-        critic_network_instances = nn.ModuleList(critic_network_instances)
-        param_sweeper_dict["critic_network_instances"] = critic_network_instances
+
 
     if param_sweeper_dict.get("reward_centering:type", None) is not None:
         if param_sweeper_dict["reward_centering:type"] == "TD":

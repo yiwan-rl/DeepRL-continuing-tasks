@@ -27,7 +27,6 @@ class OffPolicyReplayBuffer(TensorBasedReplayBuffer):
         obs: Observation,
         action: Action,
         reward: Reward,
-        next_obs: Observation,
         terminated: bool,
         truncated: bool,
     ) -> None:
@@ -35,7 +34,6 @@ class OffPolicyReplayBuffer(TensorBasedReplayBuffer):
             obs=obs,
             action=action,
             reward=reward,
-            next_obs=next_obs,
             terminated=terminated,
             truncated=truncated,
         )

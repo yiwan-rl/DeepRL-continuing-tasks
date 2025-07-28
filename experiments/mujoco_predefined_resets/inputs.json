@@ -122,67 +122,51 @@
             "max_grad_norm": [0.5]
         }
     ],
-
+    "num_runs": [5],
     "envs_name": [
         {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "Swimmer-no-timeout-v5", "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "Swimmer-no-timeout-v5", "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "HumanoidStandup-no-timeout-v5", "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "HumanoidStandup-no-timeout-v5", "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "ReacherNew-no-timeout-v5", "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "ReacherNew-no-timeout-v5", "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "PusherNew-no-timeout-v5", "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "PusherNew-no-timeout-v5", "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "SpecialAnt-no-timeout-v5", "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "SpecialAnt-no-timeout-v5", "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "HalfCheetah-no-timeout-v5", "terminate_when_unhealthy": true, "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "HalfCheetah-no-timeout-v5", "terminate_when_unhealthy": false, "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "Ant-no-timeout-v5", "terminate_when_unhealthy": true, "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "Ant-no-timeout-v5", "terminate_when_unhealthy": false, "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "Hopper-no-timeout-v5", "terminate_when_unhealthy": true, "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "Hopper-no-timeout-v5", "terminate_when_unhealthy": false, "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "Humanoid-no-timeout-v5", "terminate_when_unhealthy": true, "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "Humanoid-no-timeout-v5", "terminate_when_unhealthy": false, "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
-        },
-        {
-            "train_env_is_continuing": [true],
-            "env": [[{"env_name": "Walker2d-no-timeout-v5", "terminate_when_unhealthy": true, "random_reset_wrapper": true, "reset_prob": 0.001, "additional_action_wrapper": true, "episodic_to_continuing_wrapper": true, "reset_cost": 1.0}]],
-            "eval_in_continuing_env": [true],
-            "eval_continuing_env": [[{"env_name": "Walker2d-no-timeout-v5", "terminate_when_unhealthy": false, "additional_action_wrapper": true, "agent_reset_wrapper": true, "reset_cost": 1.0}]]
+            "env": [[
+                {"env_name": "Swimmer-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "ReacherNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "PusherNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "SpecialAnt-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HalfCheetahNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "AntNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Hopper-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Walker2d-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Swimmer-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true}, 
+                {"env_name": "ReacherNew-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
+                {"env_name": "PusherNew-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
+                {"env_name": "SpecialAnt-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
+                {"env_name": "HalfCheetahNew-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "AntNew-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "Hopper-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "Walker2d-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "Swimmer-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "ReacherNew-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "PusherNew-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "SpecialAnt-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HalfCheetahNew-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
+                {"env_name": "AntNew-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
+                {"env_name": "Hopper-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
+                {"env_name": "Walker2d-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
+                {"env_name": "Swimmer-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "ReacherNew-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "PusherNew-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "SpecialAnt-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "HalfCheetahNew-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "AntNew-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Hopper-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "Walker2d-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true}
+            ]]
         }
     ]
 }

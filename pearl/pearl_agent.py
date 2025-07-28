@@ -87,7 +87,6 @@ class PearlAgent:
         self,
         obs, reward, terminated, truncated, info,
     ) -> None:
-        next_observation = torch.from_numpy(obs)
         assert self._latest_action is not None
         if isinstance(self.policy_learner.reward_centering, MA_RC):
             ma_rate = self.policy_learner.reward_centering.ma_rate
@@ -102,11 +101,10 @@ class PearlAgent:
             obs=self._latest_observation,
             action=self._latest_action,
             reward=torch.from_numpy(reward),
-            next_obs=next_observation,
             terminated=torch.from_numpy(terminated),
             truncated=torch.from_numpy(truncated),
         )
-        self._latest_observation = next_observation
+        self._latest_observation = torch.from_numpy(obs)
 
     def learn(self) -> Dict[str, Any]:
         report = self.policy_learner.learn(self.replay_buffer)

@@ -10,5 +10,5 @@
 echo "Installing pearl requirements..."
 pip install --no-input --upgrade setuptools --no-user
 conda install --yes swig
-pip install --no-input  gymnasium[mujoco,atari]==1.0.0a2 moviepy opencv-python-headless matplotlib mujoco torch torchvision torchaudio --no-user
+pip install --no-input  gymnasium[mujoco,atari]==1.0.0a2 moviepy opencv-python-headless matplotlib mujoco torch torchvision torchaudio torchopt==0.7.3 wandb==0.21.0 --no-user
 pip install git+https://github.com/AmiiThinks/AlphaEx.git --no-user

@@ -21,6 +21,26 @@ from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.device import get_default_device
 
 
+def randint_exclude_single(low, high, size, exclude_value):
+    """Efficient method for excluding a single value"""
+    # Generate numbers from [low, high-1]
+    candidates = torch.randint(low, high, size=(size,))
+    
+    # Replace excluded values with a random valid value
+    mask = (candidates == exclude_value)
+    if mask.any():
+        # Generate replacement values
+        replacements = torch.randint(low, high, size=(mask.sum(),))
+        # Ensure replacements are not the excluded value
+        while (replacements == exclude_value).any():
+            invalid_mask = (replacements == exclude_value)
+            replacements[invalid_mask] = torch.randint(low, high, size=(invalid_mask.sum(),))
+        
+        candidates[mask] = replacements
+    
+    return candidates
+
+
 class TensorBasedReplayBuffer(ReplayBuffer):
     def __init__(
         self,
@@ -33,7 +53,6 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         self.rewards: Optional[torch.Tensor] = None
         self.terminateds: Optional[torch.Tensor] = None
         self.truncateds: Optional[torch.Tensor] = None
-        self.next_observations: Optional[torch.Tensor] = None
         self.pos = 0
         self.full = False
         self._device_for_batches: torch.device = get_default_device()
@@ -45,7 +64,6 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         reward: Reward,
         terminated: bool,
         truncated: bool,
-        next_obs: Observation,
     ) -> None:
         if self.capacity == 0:
             return
@@ -56,16 +74,12 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             self.rewards = torch.zeros((self.capacity,) + reward.shape, dtype=reward.dtype)
             self.terminateds = torch.zeros((self.capacity,) + terminated.shape, dtype=terminated.dtype)
             self.truncateds = torch.zeros((self.capacity,) + truncated.shape, dtype=truncated.dtype)
-            self.next_observations = torch.zeros(
-                (self.capacity,) + next_obs.shape, dtype=next_obs.dtype
-            )
         # pyre-fixme
         self.observations[self.pos] = obs
         self.actions[self.pos] = action
         self.rewards[self.pos] = reward
         self.terminateds[self.pos] = terminated
         self.truncateds[self.pos] = truncated
-        self.next_observations[self.pos] = next_obs
         self.pos += 1
         if self.pos == self.capacity:
             self.pos = 0
@@ -86,9 +100,10 @@ class TensorBasedReplayBuffer(ReplayBuffer):
         Create a batch of Transition objects with random state, action, reward,
         next_state, next_action, and terminated.
         """
+        raise NotImplementedError("This function is not used in the current implementation")
         assert batch_size <= self.pos
         batch_inds = torch.randint(
-            max(self.pos - last_k_steps, 0), self.pos, size=(batch_size,)
+            max(self.pos - last_k_steps - 1, 0), self.pos - 1, size=(batch_size,)
         )
         batch = TransitionBatch(
             # pyre-fixme
@@ -97,11 +112,7 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             reward=self.rewards[batch_inds],
             terminated=self.terminateds[batch_inds],
             truncated=self.truncateds[batch_inds],
-            next_state=(
-                self.next_observations[batch_inds, :]
-                if self.next_observations is not None
-                else None
-            ),
+            next_state=self.observations[batch_inds+1, :],
         ).to(self.device_for_batches)
         return batch
 
@@ -126,9 +137,10 @@ class TensorBasedReplayBuffer(ReplayBuffer):
                 f"only {len(self)} elements"
             )
         if self.full is True:
-            batch_inds = torch.randint(0, self.capacity, size=(batch_size,))
+            batch_inds = randint_exclude_single(0, self.capacity, batch_size, (self.pos - 1) % self.capacity)
         else:
-            batch_inds = torch.randint(0, self.pos, size=(batch_size,))
+            assert self.pos > 1, "can not sample when only one element is in the buffer, at least two elements are needed"
+            batch_inds = torch.randint(0, self.pos - 1, size=(batch_size,))
 
         batch = TransitionBatch(
             # pyre-fixme
@@ -137,11 +149,7 @@ class TensorBasedReplayBuffer(ReplayBuffer):
             reward=self.rewards[batch_inds],
             terminated=self.terminateds[batch_inds],
             truncated=self.truncateds[batch_inds],
-            next_state=(
-                self.next_observations[batch_inds, :]
-                if self.next_observations is not None
-                else None
-            ),
+            next_state=self.observations[batch_inds+1, :],
         ).to(self.device_for_batches)
         return batch
 
