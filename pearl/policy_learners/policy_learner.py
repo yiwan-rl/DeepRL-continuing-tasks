@@ -18,7 +18,6 @@ from pearl.policy_learners.exploration_modules.exploration_module import (
     ExplorationModule,
 )
 from pearl.replay_buffers.replay_buffer import ReplayBuffer
-from pearl.replay_buffers.tensor_based_replay_buffer import TensorBasedReplayBuffer
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
 
@@ -104,7 +103,6 @@ class PolicyLearner(torch.nn.Module, ABC):
         if isinstance(self.reward_centering, RVI_RC):
             freq = self.reward_centering.ref_states_update_freq
             if self._training_steps % freq == 0:
-                assert isinstance(replay_buffer, TensorBasedReplayBuffer)
                 self.reward_centering.f_batch = replay_buffer.create_f_batch(
                     batch_size=self._batch_size, last_k_steps=freq
                 )

@@ -154,8 +154,11 @@ class ActorCriticBase(PolicyLearner):
             self._current_steps += 1
         with torch.no_grad():
             if self._is_action_continuous:
+                # print(subjective_state.shape, self._action_space.low.shape)
+                # exit(1)
                 exploit_action = vmap(
-                    lambda x, params, buffers, low, high, mask : self._actor.sample_action(x, params, buffers, low, high, mask)
+                    lambda x, params, buffers, low, high, mask : self._actor.sample_action(x, params, buffers, low, high, mask),
+                    randomness="different"
                 )(subjective_state, self._actor_params, self._actor_buffers, self._action_space.low, self._action_space.high, self._action_space.mask)
                 action_probabilities = None
             else:

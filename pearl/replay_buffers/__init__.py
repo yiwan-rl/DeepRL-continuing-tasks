@@ -7,7 +7,6 @@
 # pyre-strict
 
 from .replay_buffer import ReplayBuffer
-from .tensor_based_replay_buffer import TensorBasedReplayBuffer
 from .transition import (
     Transition,
     TransitionBatch,
@@ -15,7 +14,6 @@ from .transition import (
 
 __all__ = [
     "ReplayBuffer",
-    "TensorBasedReplayBuffer",
     "Transition",
     "TransitionBatch",
 ]

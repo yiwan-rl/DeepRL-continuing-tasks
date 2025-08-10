@@ -79,9 +79,9 @@ class ObservationNormalization(Preprocessor):
         # preprocess observations by applying normalization
         # see https://arxiv.org/pdf/2006.05990.pdf
         assert type(obs) is np.ndarray
-        assert len(obs.shape) == 1
+        # assert len(obs.shape) == 1
         if self._test_time is False:
-            self._obs_rms.update(obs.reshape(1, -1))
+            self._obs_rms.update(obs.reshape(obs.shape[0], 1, obs.shape[1]))
         normalized_obs = (obs - self._obs_rms.mean) / np.sqrt(self._obs_rms.var + 1e-8)
         return normalized_obs, reward, terminated, truncated, info
 

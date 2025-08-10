@@ -1086,32 +1086,32 @@ def init_class(
     return module_class(**filtered_dict)
 
 
-def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
-    param_sweeper_dict["actor_network_instance"].apply(orthogonal_init_weights)
-    param_sweeper_dict["critic_network_instance"].apply(orthogonal_init_weights)
-    if hasattr(param_sweeper_dict["actor_network_instance"], "fc_mu"):
-        param_sweeper_dict["actor_network_instance"].fc_mu.weight.data.copy_(
-            0.01 * param_sweeper_dict["actor_network_instance"].fc_mu.weight.data
-        )
+# def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
+#     param_sweeper_dict["actor_network_instance"].apply(orthogonal_init_weights)
+#     param_sweeper_dict["critic_network_instance"].apply(orthogonal_init_weights)
+#     if hasattr(param_sweeper_dict["actor_network_instance"], "fc_mu"):
+#         param_sweeper_dict["actor_network_instance"].fc_mu.weight.data.copy_(
+#             0.01 * param_sweeper_dict["actor_network_instance"].fc_mu.weight.data
+#         )
 
 
-def ppo_init_network_discrete(param_sweeper_dict: Dict[str, Any]) -> None:
-    param_sweeper_dict["actor_network_instance"].apply(orthogonal_init_weights)
-    param_sweeper_dict["critic_network_instance"].apply(orthogonal_init_weights)
-    if hasattr(param_sweeper_dict["actor_network_instance"], "_model_fc"):
-        param_sweeper_dict["actor_network_instance"]._model_fc[-1][0].weight.data.copy_(
-            0.01
-            / 1.4142
-            * param_sweeper_dict["actor_network_instance"]._model_fc[-1][0].weight.data
-        )
-    if hasattr(param_sweeper_dict["critic_network_instance"], "_model_fc"):
-        param_sweeper_dict["critic_network_instance"]._model_fc[-1][
-            0
-        ].weight.data.copy_(
-            1.0
-            / 1.4142
-            * param_sweeper_dict["critic_network_instance"]._model_fc[-1][0].weight.data
-        )
+# def ppo_init_network_discrete(param_sweeper_dict: Dict[str, Any]) -> None:
+#     param_sweeper_dict["actor_network_instance"].apply(orthogonal_init_weights)
+#     param_sweeper_dict["critic_network_instance"].apply(orthogonal_init_weights)
+#     if hasattr(param_sweeper_dict["actor_network_instance"], "_model_fc"):
+#         param_sweeper_dict["actor_network_instance"]._model_fc[-1][0].weight.data.copy_(
+#             0.01
+#             / 1.4142
+#             * param_sweeper_dict["actor_network_instance"]._model_fc[-1][0].weight.data
+#         )
+#     if hasattr(param_sweeper_dict["critic_network_instance"], "_model_fc"):
+#         param_sweeper_dict["critic_network_instance"]._model_fc[-1][
+#             0
+#         ].weight.data.copy_(
+#             1.0
+#             / 1.4142
+#             * param_sweeper_dict["critic_network_instance"]._model_fc[-1][0].weight.data
+#         )
 
 
 def sac_atari_init_network(param_sweeper_dict: Dict[str, Any]) -> None:
@@ -1212,7 +1212,7 @@ if __name__ == "__main__":
     ):
         param_sweeper_dict["preprocessors"].append(
             # pyre-fixme
-            ObservationNormalization(train_env.observation_space.shape)
+            ObservationNormalization((train_env.num_envs, train_env.observation_space.element_dim()))
         )
 
     """
@@ -1389,9 +1389,16 @@ if __name__ == "__main__":
                 value_networks, param_sweeper_dict["critic_network_instance:type"]
             )
             param_sweeper_dict["critic_network_instance:input_dim"] = (
-                env.observation_space.shape[0]
+                env.observation_space.element_dim()
             )
-            param_sweeper_dict["critic_network_instance"] = init_class(critic_class, "critic_network_instance", param_sweeper_dict)
+            critic_network_instances = []
+
+            for i in range(len(param_sweeper_dict["env"]) * param_sweeper_dict["num_runs"]):
+                for _ in range(param_sweeper_dict.get("ensemble_critic_size", 1)):
+                    param_sweeper_dict["critic_network_instance:effective_state_dim"] = env.observation_space.actual_sizes[i]
+                    critic_network_instances.append(init_class(critic_class, "critic_network_instance", param_sweeper_dict))
+            critic_network_instances = nn.ModuleList(critic_network_instances)
+            param_sweeper_dict["critic_network_instances"] = critic_network_instances
         elif param_sweeper_dict["critic_network_instance:type"] in [
             "CNNValueNetwork",
         ]:
@@ -1429,17 +1436,17 @@ if __name__ == "__main__":
     network initialization
     """
 
-    if (
-        param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
-        and param_sweeper_dict["is_action_continuous"] is True
-    ):
-        ppo_init_network_continuous(param_sweeper_dict)
+    # if (
+    #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
+    #     and param_sweeper_dict["is_action_continuous"] is True
+    # ):
+    #     ppo_init_network_continuous(param_sweeper_dict)
 
-    if (
-        param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
-        and param_sweeper_dict["is_action_continuous"] is False
-    ):
-        ppo_init_network_discrete(param_sweeper_dict)
+    # if (
+    #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
+    #     and param_sweeper_dict["is_action_continuous"] is False
+    # ):
+    #     ppo_init_network_discrete(param_sweeper_dict)
 
     if param_sweeper_dict["policy_learner:type"] == "SoftActorCritic" and (
         "ALE/" in training_env_name or "NoFrameskip" in training_env_name
@@ -1503,8 +1510,34 @@ if __name__ == "__main__":
     # ---------------------
     # Optimizer setup
     # ---------------------
-    param_sweeper_dict["actor_optimizer"] = torchopt.adam(lr=param_sweeper_dict["actor_optimizer:lr"])
-    param_sweeper_dict["critic_optimizer"] = torchopt.adam(lr=param_sweeper_dict["critic_optimizer:lr"])
+    if param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization":
+        param_sweeper_dict["actor_optimizer"] = torchopt.chain(
+            torchopt.clip_grad_norm(max_norm=param_sweeper_dict["max_grad_norm"]), 
+            torchopt.adam(
+                lr=torchopt.schedule.linear_schedule(
+                    init_value=param_sweeper_dict["actor_optimizer:lr"], 
+                    end_value=param_sweeper_dict["actor_optimizer:lr"] * 0.0, 
+                    transition_steps=param_sweeper_dict["max_steps"], 
+                    transition_begin=0
+                )
+            )
+        )
+        param_sweeper_dict["critic_optimizer"] = torchopt.chain(
+            torchopt.clip_grad_norm(max_norm=param_sweeper_dict["max_grad_norm"]), 
+            torchopt.adam(
+                lr=torchopt.schedule.linear_schedule(
+                    init_value=param_sweeper_dict["critic_optimizer:lr"], 
+                    end_value=param_sweeper_dict["critic_optimizer:lr"] * 0.0, 
+                    transition_steps=param_sweeper_dict["max_steps"], 
+                    transition_begin=0
+                )
+            )
+        )
+    else:
+        param_sweeper_dict["actor_optimizer"] = torchopt.adam(lr=param_sweeper_dict["actor_optimizer:lr"])
+        param_sweeper_dict["critic_optimizer"] = torchopt.adam(lr=param_sweeper_dict["critic_optimizer:lr"])
+    # param_sweeper_dict["actor_optimizer"] = torchopt.adam(lr=param_sweeper_dict["actor_optimizer:lr"])
+    # param_sweeper_dict["critic_optimizer"] = torchopt.adam(lr=param_sweeper_dict["critic_optimizer:lr"])
     """
     Initialize a policy learner
     """

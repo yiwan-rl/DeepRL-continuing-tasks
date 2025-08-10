@@ -33,6 +33,7 @@ class VanillaValueNetwork(nn.Module):
         hidden_dims: Optional[List[int]],
         output_dim: int = 1,
         hidden_activation: str = "relu",
+        effective_state_dim: int = None,
         **kwargs: Any,
     ) -> None:
         super().__init__()
@@ -41,6 +42,7 @@ class VanillaValueNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=output_dim,
             hidden_activation=hidden_activation,
+            effective_state_dim=effective_state_dim,
             **kwargs,
         )
 

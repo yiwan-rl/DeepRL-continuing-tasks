@@ -73,15 +73,14 @@ class PearlAgent:
         action = self.policy_learner.act(
             self._latest_observation.to(self.device), exploit=exploit  # pyre-fixme[6]
         )
+        self._latest_action = action.detach().cpu()
 
         if hasattr(self.policy_learner, "action_post_processing") and callable(
             self.policy_learner.action_post_processing
         ):
-            action = self.policy_learner.action_post_processing(action)
-
-        self._latest_action = action.detach().cpu()
-        
-        return self._latest_action.numpy()
+            return self.policy_learner.action_post_processing(action).detach().cpu().numpy()
+        else:
+            return self._latest_action.numpy()
 
     def observe(
         self,
@@ -97,14 +96,16 @@ class PearlAgent:
 
         assert self._latest_observation is not None
         assert self._latest_action is not None
+        next_obs = torch.from_numpy(obs)
         self.replay_buffer.push(
             obs=self._latest_observation,
             action=self._latest_action,
             reward=torch.from_numpy(reward),
             terminated=torch.from_numpy(terminated),
             truncated=torch.from_numpy(truncated),
+            next_obs=next_obs,
         )
-        self._latest_observation = torch.from_numpy(obs)
+        self._latest_observation = next_obs
 
     def learn(self) -> Dict[str, Any]:
         report = self.policy_learner.learn(self.replay_buffer)
@@ -113,16 +114,6 @@ class PearlAgent:
             self.replay_buffer.clear()
 
         return report
-
-    def learn_batch(self, batch: TransitionBatch) -> Dict[str, typing.Any]:
-        """
-        This API is often used in offline learning
-        where users pass in a batch of data to train directly
-        """
-        batch = self.policy_learner.preprocess_batch(batch)
-        policy_learner_loss = self.policy_learner.learn_batch(batch)
-
-        return policy_learner_loss
 
     def reset(
         self, observation: Observation

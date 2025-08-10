@@ -8,7 +8,7 @@
 # pyre-strict
 
 import math
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import torch
 from pearl.neural_networks.sequential_decision_making.actor_networks import (
@@ -28,8 +28,90 @@ from pearl.replay_buffers.sequential_decision_making.on_policy_replay_buffer imp
 from pearl.replay_buffers.transition import TransitionBatch
 from pearl.utils.functional_utils.learning.preprocessing import RunningMeanStd
 from pearl.utils.functional_utils.learning.reward_centering import MA_RC, RVI_RC, TD_RC
-from torch import nn, optim
+from torch import nn
 from pearl.utils.instantiations.spaces import VectorDiscreteSpace, VectorBoxSpace
+from torch.func import grad
+from torch import vmap
+from torch.func import functional_call
+import torchopt
+
+
+def actor_loss_fn(
+        actor_network_instance: nn.Module, 
+        actor_params, 
+        actor_buffers,
+        state,
+        action,
+        action_log_probs_old,
+        action_space_mask,
+        epsilon,
+        norm_adv,
+        entropy_bonus_scaling,
+        gae,
+    ):
+    action_log_probs, entropy = actor_network_instance.get_action_log_prob_and_entropy(
+        state_batch=state,
+        action_batch=action,
+        params=actor_params,
+        buffers=actor_buffers,
+        action_space_mask=action_space_mask,
+    )  # shape (batch_size, 1), (batch_size, 1)
+
+    r_thelta = torch.exp(
+        action_log_probs - action_log_probs_old
+    )  # shape (batch_size, 1)
+
+    clip = torch.clamp(
+        r_thelta, min=1.0 - epsilon, max=1.0 + epsilon
+    )  # shape (batch_size, 1)
+    if norm_adv:
+        adv = (gae - gae.mean()) / (gae.std() + 1e-8)
+        loss = torch.mean(-torch.min(r_thelta * adv, clip * adv))
+    else:
+        loss = torch.mean(-torch.min(r_thelta * gae, clip * gae))
+    loss -= entropy_bonus_scaling * torch.mean(entropy)
+    return loss
+
+
+def critic_loss_fn(
+    critic_network_instance: nn.Module,
+    critic_params,
+    critic_buffers,
+    state, # (batch_size, state_dim)
+    norm_return,
+    lam_return,
+    clip_value,
+    epsilon,
+    value_old,
+    ret_rms_var,
+):
+    if norm_return:  # normalize the return
+        assert lam_return is not None
+        lam_return = lam_return / math.sqrt(float(ret_rms_var) + 1e-8)
+    else:
+        lam_return = lam_return
+    value = critic_value_fn(critic_network_instance, critic_params, critic_buffers, state)  # shape (batch_size)
+
+    if clip_value:
+        assert value_old is not None
+        v_clip = value_old + (value - value_old).clamp(
+            -epsilon,
+            epsilon,
+        )
+        vf1 = (lam_return - value).pow(2)
+        vf2 = (lam_return - v_clip).pow(2)
+        return torch.max(vf1, vf2).mean()
+    else:
+        return (lam_return - value).pow(2).mean()
+
+
+def critic_value_fn(
+    critic_network_instance: nn.Module,
+    critic_params,
+    critic_buffers,
+    state,
+):
+    return functional_call(critic_network_instance, (critic_params, critic_buffers), (state))
 
 
 class ProximalPolicyOptimization(ActorCriticBase):
@@ -43,8 +125,8 @@ class ProximalPolicyOptimization(ActorCriticBase):
         action_space: VectorDiscreteSpace | VectorBoxSpace,
         actor_network_instances: nn.ModuleList,
         critic_network_instances: nn.ModuleList,
-        actor_optimizer: optim.Optimizer,
-        critic_optimizer: optim.Optimizer,
+        actor_optimizer,
+        critic_optimizer,
         exploration_module: ExplorationModule,
         is_action_continuous: bool,
         discount_factor: float = 0.99,
@@ -90,88 +172,128 @@ class ProximalPolicyOptimization(ActorCriticBase):
         self._norm_adv = norm_adv
         self._critic_weight = critic_weight
         self._max_grad_norm = max_grad_norm
-        if self._norm_return:
-            self._ret_rms: RunningMeanStd = RunningMeanStd(shape=(1,))
+        self._ret_rms: RunningMeanStd = RunningMeanStd(shape=(1,))
         self._anneal_lr = anneal_lr
         self._max_steps = max_steps
         self._clip_value = clip_value
         self._reprocessing_buffer = reprocessing_buffer
 
-    def _actor_loss(self, batch: TransitionBatch) -> torch.Tensor:
-        """
-        Loss = actor loss + critic loss + entropy_bonus_scaling * entropy loss
-        """
-        # TODO: change the output shape of value networks
-        assert isinstance(batch, OnPolicyTransitionBatch)
-        if self._is_action_continuous:
-            action_log_probs, entropy = self._actor.get_action_log_prob_and_entropy(
-                state_batch=batch.state,
-                action_batch=batch.action,
-            )  # shape (batch_size, 1), (batch_size, 1)
-        else:
-            action_log_probs, entropy = self._actor.get_action_log_prob_and_entropy(
-                state_batch=batch.state,
-                action_batch=batch.action,
-            )  # shape (batch_size, 1), (batch_size, 1)
-        # actor loss
-        action_log_probs_old = batch.action_log_probs
-        r_thelta = torch.exp(
-            action_log_probs - action_log_probs_old
-        )  # shape (batch_size, 1)
-        clip = torch.clamp(
-            r_thelta, min=1.0 - self._epsilon, max=1.0 + self._epsilon
-        )  # shape (batch_size, 1)
-        if self._norm_adv:
-            # pyre-fixme
-            adv = (batch.gae - batch.gae.mean()) / (batch.gae.std() + 1e-8)
-            loss = torch.mean(-torch.min(r_thelta * adv, clip * adv))
-        else:
-            loss = torch.mean(-torch.min(r_thelta * batch.gae, clip * batch.gae))
-        loss -= self._entropy_bonus_scaling * torch.mean(entropy)
-        return loss
+        # Wrap grad with vmap to compute gradients per experiment
+        self._actor_grad_fn = vmap(
+            grad(actor_loss_fn, argnums=1),
+            in_dims=(
+                None,  # actor_network_instance
+                0,  # actor_params
+                0,  # actor_buffers
+                0,  # state
+                0,  # action
+                0,  # action_log_probs_old
+                0,  # action_space_mask
+                None,  # epsilon
+                None,  # norm_adv
+                None,  # entropy_bonus_scaling
+                0,  # gae
+            ),
+            randomness="different"
+        )
+        self._critic_grad_fn = vmap(
+            grad(critic_loss_fn, argnums=1),
+            in_dims=(
+                None,  # critic_network_instance
+                0,  # critic_params batched over experiments
+                0,  # critic_buffers batched over experiments
+                0,  # state
+                None,  # norm_return
+                0,  # lam_return
+                None,  # clip_value
+                None,  # epsilon
+                0,  # value_old
+                None,  # ret_rms_var
+            ),
+            randomness="different"
+        )
+    
+    def _get_actor_gradient(self, batch: TransitionBatch) -> torch.Tensor:
+        # batch.state shape: (batch_size, num_exps, state_dim)
+        # Make sure batch.state shape is (batch_size, num_exps, state_dim)
+        grads = self._actor_grad_fn(
+            self._actor,
+            self._actor_params,
+            self._actor_buffers,
+            batch.state,
+            batch.action,
+            batch.action_log_probs,
+            self._action_space.mask,
+            torch.tensor(self._epsilon, device=batch.state.device),
+            torch.tensor(self._norm_adv, device=batch.state.device),
+            torch.tensor(self._entropy_bonus_scaling, device=batch.state.device),
+            batch.gae,
+        )
+        return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)
 
-    def _critic_loss(self, batch: TransitionBatch) -> torch.Tensor:
-        assert isinstance(batch, OnPolicyTransitionBatch)
-        assert batch.lam_return is not None
-        if self._norm_return:  # normalize the return
-            assert batch.lam_return is not None
-            lam_return = batch.lam_return / math.sqrt(float(self._ret_rms.var) + 1e-8)
-        else:
-            lam_return = batch.lam_return
-        value = self._critic(batch.state)  # shape (batch_size)
+    def _get_critic_gradient(self, batch: TransitionBatch) -> torch.Tensor:
+        grads = self._critic_grad_fn(
+            self._critic,
+            self._critic_params,
+            self._critic_buffers,
+            batch.state,
+            torch.tensor(self._norm_return),
+            batch.lam_return,
+            torch.tensor(self._clip_value),
+            torch.tensor(self._epsilon).to(batch.state.device),
+            batch.value,
+            torch.tensor(self._ret_rms.var).to(batch.state.device),
+        )
+        return torch.utils._pytree.tree_map(lambda g: g.detach(), grads)
 
-        if self._clip_value:
-            assert batch.value is not None
-            v_clip = batch.value + (value - batch.value).clamp(
-                -self._epsilon,
-                self._epsilon,
-            )
-            vf1 = (lam_return - value).pow(2)
-            vf2 = (lam_return - v_clip).pow(2)
-            return torch.max(vf1, vf2).mean()
-        else:
-            return (lam_return - value).pow(2).mean()
+
 
     def learn_batch(self, batch: TransitionBatch) -> Dict[str, Any]:
-        actor_loss = self._actor_loss(batch)
-        critic_loss = self._critic_loss(batch)
-        self._actor_optimizer.zero_grad()
-        self._critic_optimizer.zero_grad()
-        loss = actor_loss + self._critic_weight * critic_loss
-        loss.backward()
-        if self._max_grad_norm is not None:
-            nn.utils.clip_grad_norm_(
-                list(self._actor.parameters()) + list(self._critic.parameters()),
-                self._max_grad_norm,
-            )
-        self._actor_optimizer.step()
-        self._critic_optimizer.step()
-        report = {
-            "actor_loss": actor_loss.item(),
-            "critic_loss": critic_loss.item(),
-            "reward_rate_estimate": self.reward_rate.item(),
-        }
-        return report
+        # Compute actor losses per experiment
+        actor_loss_fn_batch = vmap(actor_loss_fn, in_dims=(None, 0, 0, 0, 0, 0, 0, None, None, None, 0), randomness="different")
+        actor_losses = actor_loss_fn_batch(
+            self._actor,
+            self._actor_params,
+            self._actor_buffers,
+            batch.state,
+            batch.action,
+            batch.action_log_probs,
+            self._action_space.mask,
+            self._epsilon,
+            self._norm_adv,
+            self._entropy_bonus_scaling,
+            batch.gae,
+        )
+        
+        # Compute critic losses per experiment
+        critic_loss_fn_batch = vmap(critic_loss_fn, in_dims=(None, 0, 0, 0, None, 0, None, None, 0, None), randomness="different")
+        critic_losses = critic_loss_fn_batch(
+            self._critic,
+            self._critic_params,
+            self._critic_buffers,
+            batch.state,
+            self._norm_return,
+            batch.lam_return,
+            self._clip_value,
+            self._epsilon,
+            batch.value,
+            self._ret_rms.var,
+        )
+
+        actor_gradients = self._get_actor_gradient(batch)
+        critic_gradients = self._get_critic_gradient(batch)
+
+        # Update parameters
+        actor_updates, self._actor_optimizer_state = self._actor_optimizer.update(
+            actor_gradients, self._actor_optimizer_state
+        )
+        critic_updates, self._critic_optimizer_state = self._critic_optimizer.update(
+            critic_gradients, self._critic_optimizer_state
+        )
+        self._actor_params = torchopt.apply_updates(self._actor_params, actor_updates)
+        self._critic_params = torchopt.apply_updates(self._critic_params, critic_updates)
+
+        return {"actor_loss": actor_losses.detach().cpu(), "critic_loss": critic_losses.detach().cpu()}
 
     def learn(self, replay_buffer: ReplayBuffer) -> Dict[str, Any]:
         if isinstance(self.reward_centering, RVI_RC):
@@ -180,23 +302,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
                 # pyre-fixme
                 batch = replay_buffer.create_f_batch(
                     batch_size=self._batch_size, last_k_steps=freq
-                )
-                # pyre-fixme
-                self.reward_centering.f_batch = self.preprocess_batch(batch)
-        if self._anneal_lr:
-            assert self._max_steps is not None
-            # pyre-fixme
-            frac = 1.0 - (self._current_steps - 1.0) / self._max_steps
-            self._actor_optimizer.param_groups[0]["lr"] = (
-                frac * self._actor_learning_rate
-            )
-            self._critic_optimizer.param_groups[0]["lr"] = (
-                frac * self._critic_learning_rate
-            )
-            if isinstance(self.reward_centering, TD_RC):
-                self.reward_centering.optimizer.param_groups[0]["lr"] = (
-                    # pyre-fixme
-                    frac * self.reward_centering.init_reward_rate_learning_rate
                 )
         if len(replay_buffer) == 0:
             return {}
@@ -223,7 +328,6 @@ class ProximalPolicyOptimization(ActorCriticBase):
             batch = replay_buffer.sample(batch_size)
             single_report = {}
             if isinstance(batch, TransitionBatch):
-                batch = self.preprocess_batch(batch)
                 single_report = self.learn_batch(batch)
 
             for k, v in single_report.items():
@@ -250,11 +354,21 @@ class ProximalPolicyOptimization(ActorCriticBase):
         assert type(replay_buffer) is OnPolicyReplayBuffer
         replay_buffer.init_indices()
         batch = replay_buffer.sample_all()
-        self.preprocess_batch(batch)
-        state_values = self._critic(batch.state).detach().cpu()  # shape (batch_size, 1)
+        state_values = (
+            vmap(
+                critic_value_fn, 
+                in_dims=(None, 0, 0, 0),
+                randomness="different"
+            )(self._critic, self._critic_params, self._critic_buffers, batch.state).detach().cpu()
+        )  # shape (num_exps, batch_size, 1)
+
         next_state_values = (
-            self._critic(batch.next_state).detach().cpu()
-        )  # shape (batch_size, 1)
+            vmap(
+                critic_value_fn, 
+                in_dims=(None, 0, 0, 0),
+                randomness="different"
+            )(self._critic, self._critic_params, self._critic_buffers, batch.next_state).detach().cpu()
+        )  # shape (num_exps, batch_size, 1)
 
         if self._norm_return:  # unnormalize state_values
             state_values = state_values * math.sqrt(float(self._ret_rms.var) + 1e-8)
@@ -262,22 +376,17 @@ class ProximalPolicyOptimization(ActorCriticBase):
                 float(self._ret_rms.var) + 1e-8
             )
         if update_action_log_prob:
-            if self._is_action_continuous:
-                action_log_probs, _ = self._actor.get_action_log_prob_and_entropy(
-                    state_batch=batch.state,
-                    action_batch=batch.action,
-                )  # shape (batch_size, 1)
-            else:
-                action_log_probs, _ = self._actor.get_action_log_prob_and_entropy(
-                    state_batch=batch.state,
-                    action_batch=batch.action,
-                )  # shape (batch_size, 1)
-            action_log_probs = action_log_probs.detach().cpu()
+            action_log_probs, _ = vmap(
+                self._actor.get_action_log_prob_and_entropy, 
+                in_dims=(0, 0, 0, 0, 0),
+                randomness="different"
+            )(batch.state, batch.action, self._actor_params, self._actor_buffers, self._action_space.mask)  # shape (num_exps, batch_size, 1)
+            action_log_probs = action_log_probs.detach().cpu()  # shape (num_exps, batch_size, 1)
             replay_buffer.action_log_probs = action_log_probs
 
-        reward = batch.reward.view(-1, 1).cpu()  # shape (batch_size, 1)
-        terminated = batch.terminated.view(-1, 1).cpu()  # shape (batch_size, 1)
-        truncated = batch.truncated.view(-1, 1).cpu()  # shape (batch_size, 1)
+        reward = batch.reward.unsqueeze(-1).cpu()  # shape (num_exps, batch_size, 1)
+        terminated = batch.terminated.unsqueeze(-1).cpu()  # shape (num_exps, batch_size, 1)
+        truncated = batch.truncated.unsqueeze(-1).cpu()  # shape (num_exps, batch_size, 1)
         if isinstance(self.reward_centering, TD_RC):
             if self.reward_centering.initialize_reward_rate == True:
                 self.reward_rate.data.fill_(batch.reward.mean())
@@ -292,35 +401,36 @@ class ProximalPolicyOptimization(ActorCriticBase):
                 * next_state_values
                 * torch.logical_not(terminated)
                 - state_values
-            )  # shape (batch_size, 1)
+            )  # shape (num_exps, batch_size, 1)
             reward_rate_error = td_errors.pow(2).mean()
             reward_rate_error.backward()
             # pyre-fixme
             self.reward_centering.optimizer.step()
+
         td_errors = (
             reward
             - self.reward_rate.detach().cpu()
             + self._discount_factor * next_state_values * torch.logical_not(terminated)
             - state_values
-        )  # shape (batch_size, 1)
+        )  # shape (num_exps, batch_size, 1)
 
         discounting = (
             torch.logical_not(torch.logical_or(terminated, truncated))
             * self._discount_factor
             * self._trace_decay_param
-        )  # shape (batch_size, 1)
+        )  # shape (num_exps, batch_size, 1)
 
         replay_buffer.gae = torch.zeros_like(td_errors)
-        replay_buffer.gae[-1] = td_errors[-1]
+        replay_buffer.gae[:, -1] = td_errors[:, -1]
 
         for i in range(replay_buffer.pos - 2, -1, -1):
             # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
-            replay_buffer.gae[i] = (
+            replay_buffer.gae[:, i] = (
                 # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
-                td_errors[i]
+                td_errors[:, i]
                 # pyre-fixme
-                + discounting[i] * replay_buffer.gae[i + 1]
-            )  # shape (1)
+                + discounting[:, i] * replay_buffer.gae[:, i + 1]
+            )  # shape (num_exps, batch_size, 1)
         # pyre-fixme
         replay_buffer.lam_return = replay_buffer.gae + state_values
         replay_buffer.value = state_values
@@ -336,7 +446,8 @@ class ProximalPolicyOptimization(ActorCriticBase):
         """
         if self._is_action_continuous:
             action = torch.clamp(action, min=-1.0, max=1.0)
-            action = action_scaling(self.action_space.low, self.action_space.high, action)
+            action = action_scaling(self._action_space.low, self._action_space.high, action)
+            action = action * self._action_space.mask
         return action
 
     def compute_f_value(self, batch: TransitionBatch) -> torch.Tensor:

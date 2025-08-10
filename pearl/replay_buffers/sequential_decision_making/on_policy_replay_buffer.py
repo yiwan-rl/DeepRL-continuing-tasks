@@ -17,8 +17,9 @@ import torch
 from pearl.api.observation import Observation
 from pearl.api.action import Action
 from pearl.api.reward import Reward
-from pearl.replay_buffers.tensor_based_replay_buffer import TensorBasedReplayBuffer
+from pearl.replay_buffers.replay_buffer import ReplayBuffer
 from pearl.replay_buffers.transition import Transition, TransitionBatch
+from pearl.utils.device import get_default_device
 
 
 @dataclass(frozen=False)
@@ -60,16 +61,63 @@ class OnPolicyTransitionBatch(TransitionBatch):
         return child_obj
 
 
-class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
+class OnPolicyReplayBuffer(ReplayBuffer):
     def __init__(
         self,
         capacity: int,
     ) -> None:
-        super(OnPolicyReplayBuffer, self).__init__(
-            capacity=capacity,
-        )
+        super(ReplayBuffer, self).__init__()
+        self.capacity = capacity
+        self.observations: Optional[torch.Tensor] = None
+        self.actions: Optional[torch.Tensor] = None
+        self.rewards: Optional[torch.Tensor] = None
+        self.terminateds: Optional[torch.Tensor] = None
+        self.truncateds: Optional[torch.Tensor] = None
+        self.next_observations: Optional[torch.Tensor] = None
+        self.pos = 0
+        self.full = False
+        self._device_for_batches: torch.device = get_default_device()
         self._count: int = 0
         self._indices: Optional[np.ndarray] = None
+    
+    def add(
+        self,
+        obs: Observation,
+        action: Action,
+        reward: Reward,
+        terminated: bool,
+        truncated: bool,
+        next_obs: Observation,
+    ) -> None:
+        if self.capacity == 0:
+            return
+        if self.observations is None:
+            self.observations = torch.zeros((self.capacity,) + obs.shape, dtype=obs.dtype)
+            # pyre-fixme
+            self.actions = torch.zeros((self.capacity,) + action.shape, dtype=action.dtype)
+            self.rewards = torch.zeros((self.capacity,) + reward.shape, dtype=reward.dtype)
+            self.terminateds = torch.zeros((self.capacity,) + terminated.shape, dtype=terminated.dtype)
+            self.truncateds = torch.zeros((self.capacity,) + truncated.shape, dtype=truncated.dtype)
+            self.next_observations = torch.zeros((self.capacity,) + next_obs.shape, dtype=next_obs.dtype)
+        # pyre-fixme
+        self.observations[self.pos] = obs
+        self.actions[self.pos] = action
+        self.rewards[self.pos] = reward
+        self.terminateds[self.pos] = terminated
+        self.truncateds[self.pos] = truncated
+        self.next_observations[self.pos] = next_obs
+        self.pos += 1
+        if self.pos == self.capacity:
+            self.pos = 0
+            self.full = True
+
+    @property
+    def device_for_batches(self) -> torch.device:
+        return self._device_for_batches
+
+    @device_for_batches.setter
+    def device_for_batches(self, new_device_for_batches: torch.device) -> None:
+        self._device_for_batches = new_device_for_batches
 
     def push(
         self,
@@ -115,21 +163,17 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
 
         batch = OnPolicyTransitionBatch(
             # pyre-fixme
-            state=self.observations[batch_inds, :],
-            action=self.actions[batch_inds, :],
-            reward=self.rewards[batch_inds],
-            terminated=self.terminateds[batch_inds],
-            truncated=self.truncateds[batch_inds],
-            next_state=(
-                self.next_observations[batch_inds, :]
-                if self.next_observations is not None
-                else None
-            ),
+            state=self.observations[batch_inds, :].transpose(0, 1),  # (num_exps, batch_size, state_dim)
+            action=self.actions[batch_inds, :].transpose(0, 1),
+            reward=self.rewards[batch_inds].transpose(0, 1),
+            terminated=self.terminateds[batch_inds].transpose(0, 1),
+            truncated=self.truncateds[batch_inds].transpose(0, 1),
+            next_state=self.next_observations[batch_inds, :].transpose(0, 1),
             # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
-            action_log_probs=self.action_log_probs[batch_inds, :],
-            gae=self.gae[batch_inds, :],
-            lam_return=self.lam_return[batch_inds, :],
-            value=self.value[batch_inds, :],
+            action_log_probs=self.action_log_probs[:, batch_inds],
+            gae=self.gae[:, batch_inds],
+            lam_return=self.lam_return[:, batch_inds],
+            value=self.value[:, batch_inds],
         ).to(self.device_for_batches)
         self._count += batch_size
 
@@ -146,16 +190,23 @@ class OnPolicyReplayBuffer(TensorBasedReplayBuffer):
 
         batch = TransitionBatch(
             # pyre-fixme
-            state=self.observations[: self.pos, :],
-            action=self.actions[: self.pos, :],
-            reward=self.rewards[: self.pos],
-            terminated=self.terminateds[: self.pos],
-            truncated=self.truncateds[: self.pos],
-            next_state=(
-                self.next_observations[: self.pos, :]
-                if self.next_observations is not None
-                else None
-            ),
+            state=self.observations[: self.pos, :].transpose(0, 1),  # (num_exps, batch_size, state_dim)
+            action=self.actions[: self.pos, :].transpose(0, 1),
+            reward=self.rewards[: self.pos].transpose(0, 1),
+            terminated=self.terminateds[: self.pos].transpose(0, 1),
+            truncated=self.truncateds[: self.pos].transpose(0, 1),
+            next_state=self.next_observations[: self.pos, :].transpose(0, 1),
         ).to(self.device_for_batches)
 
         return batch
+
+    def __len__(self) -> int:
+        if self.full is True:
+            return self.capacity
+        else:
+            return self.pos
+
+    def clear(self) -> None:
+        self.observations = None
+        self.pos = 0
+        self.full = False

@@ -374,9 +374,8 @@ class GaussianActorNetwork(nn.Module):
         input_dim: int,
         hidden_dims: List[int],
         output_dim: int,
-        state_conditioned_std: bool = True,
         hidden_activation: str = "relu",
-        log_std_init_offset: float = 0.0,
+        effective_input_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
         if len(hidden_dims) < 1:
@@ -390,15 +389,10 @@ class GaussianActorNetwork(nn.Module):
             output_dim=hidden_dims[-1],
             hidden_activation=hidden_activation,
             last_activation=hidden_activation,
+            effective_input_dim=effective_input_dim,
         )
         self.fc_mu = torch.nn.Linear(hidden_dims[-1], output_dim)
-        self.state_conditioned_std = state_conditioned_std
-        if self.state_conditioned_std:
-            self.fc_std: nn.Module = torch.nn.Linear(hidden_dims[-1], output_dim)
-        else:
-            self.log_std: torch.Tensor = nn.Parameter(
-                torch.zeros(output_dim) + log_std_init_offset
-            )
+        self.fc_std: nn.Module = torch.nn.Linear(hidden_dims[-1], output_dim)
 
 
         # preventing the actor network from learning a flat or a point mass distribution
@@ -408,26 +402,25 @@ class GaussianActorNetwork(nn.Module):
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x = self._model(x)
         mean = self.fc_mu(x)
-        if self.state_conditioned_std:
-            log_std = self.fc_std(x)
-            # log_std = torch.clamp(log_std, min=self._log_std_min, max=self._log_std_max)
+        log_std = self.fc_std(x)
+        # log_std = torch.clamp(log_std, min=self._log_std_min, max=self._log_std_max)
 
-            # alternate to standard clamping; not sure if it makes a difference but still
-            # trying out
-            log_std = torch.tanh(log_std)
-            log_std = self._log_std_min + 0.5 * (
-                self._log_std_max - self._log_std_min
-            ) * (log_std + 1)
-        else:
-            log_std = self.log_std.expand_as(mean)
+        # alternate to standard clamping; not sure if it makes a difference but still
+        # trying out
+        log_std = torch.tanh(log_std)
+        log_std = self._log_std_min + 0.5 * (
+            self._log_std_max - self._log_std_min
+        ) * (log_std + 1)
         return mean, log_std
 
     def sample_action(
         self, 
         state_batch: Tensor, 
         params, 
+        buffers,
         action_space_low: torch.Tensor, 
         action_space_high: torch.Tensor, 
+        action_space_mask: torch.Tensor,
         get_log_prob: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -441,10 +434,12 @@ class GaussianActorNetwork(nn.Module):
             action: Sampled action, scaled to the action space bounds.
             log_prob [Optional]: log probability of the sampled action.
         """
-        mean, log_std = torch.func.functional_call(self, params, (state_batch))
+        mean, log_std = torch.func.functional_call(self, (params, buffers), (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
-        sample = normal.rsample()  # reparameterization trick
+        # normal.rsample() is not compatible with vmap, so we do reparameterization trick here manually
+        noise = torch.normal(0, 1, mean.shape, device=mean.device)
+        sample = mean + std * noise
 
         # ensure sampled action is within [-1, 1]^{action_dim}
         normalized_action = torch.tanh(sample)
@@ -452,46 +447,13 @@ class GaussianActorNetwork(nn.Module):
         # clamp each action dimension to prevent numerical issues in tanh
         # normalized_action.clamp(-1 + epsilon, 1 - epsilon)
         action = action_scaling(action_space_low, action_space_high, normalized_action)
+        action = action * action_space_mask
         if get_log_prob:
-            log_prob = self._get_log_prob_normal(normal, sample, normalized_action)
+            action_bound = (action_space_high - action_space_low) / 2
+            log_prob = self._get_log_prob_normal(normal, sample, normalized_action, action_bound, action_space_mask)
             return action, log_prob
         else:
             return action
-
-    def get_action_log_prob_and_entropy(
-        self, state_batch: torch.Tensor, action_batch: torch.Tensor, params, action_space_low: torch.Tensor, action_space_high: torch.Tensor
-    ) -> Tuple[Tensor, Tensor]:
-        """
-        Compute log probability of actions, pi(a|s) under the policy parameterized by
-        the actor network.
-        Args:
-            state_batch: batch of states
-            action_batch: batch of actions
-        Returns:
-            log_prob: log probability of each action in the batch
-        """
-        epsilon = 1e-6
-        mean, log_std = torch.func.functional_call(self, params, (state_batch))
-        std = log_std.exp()
-        normal = Normal(mean, std)
-
-        normalized_action_batch = torch.clip(
-            # rescales from [low, high]^{action_dim} to [-1, 1]^{action_dim}.
-            action_unscaling(action_space_low, action_space_high, action_batch),
-            -1 + epsilon,
-            1 - epsilon,
-        )
-
-        # transform actions from [-1, 1]^d to [-inf, inf]^d
-        unnormalized_action_batch = torch.atanh(normalized_action_batch)
-        action_bound = (action_space_high - action_space_low) / 2
-        log_prob = self._get_log_prob_normal(
-            normal, unnormalized_action_batch, normalized_action_batch, action_bound
-        )
-
-        return log_prob, normal.entropy().view(
-            -1, 1
-        )  # shape (batch_size, 1), (batch_size, 1)
 
     def _get_log_prob_normal(
         self,
@@ -499,16 +461,19 @@ class GaussianActorNetwork(nn.Module):
         unnormalized_action_batch: Tensor,
         normalized_action_batch: Tensor,
         action_bound: torch.Tensor,
+        action_space_mask: torch.Tensor,
     ) -> Tensor:
         log_prob = normal_dist.log_prob(unnormalized_action_batch)
         log_prob -= torch.log(
             action_bound * (1 - normalized_action_batch.pow(2)) + 1e-6
         )
 
+        log_prob = log_prob * action_space_mask
+
         # for multi-dimensional action space, sum log probabilities over individual
         # action dimension
         if log_prob.dim() == 2:
-            log_prob = log_prob.sum(dim=1, keepdim=True)
+            log_prob = log_prob.sum(dim=1)
 
         return log_prob
 
@@ -541,6 +506,7 @@ class ClipGaussianActorNetwork(nn.Module):
         output_dim: int,
         hidden_activation: str = "tanh",
         log_std_init_offset: float = 0.0,
+        effective_input_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
         if len(hidden_dims) < 1:
@@ -554,6 +520,7 @@ class ClipGaussianActorNetwork(nn.Module):
             output_dim=hidden_dims[-1],
             hidden_activation=hidden_activation,
             last_activation=hidden_activation,
+            effective_input_dim=effective_input_dim,
         )
         self.fc_mu = torch.nn.Linear(hidden_dims[-1], output_dim)
         self.log_std: torch.Tensor = nn.Parameter(
@@ -567,7 +534,7 @@ class ClipGaussianActorNetwork(nn.Module):
         return mean, log_std
 
     def sample_action(
-        self, state_batch: Tensor, params, get_log_prob: bool = False
+        self, state_batch: Tensor, params, buffer, action_space_low: torch.Tensor = None, action_space_high: torch.Tensor = None, action_space_mask: torch.Tensor = None
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
         Sample an action from the actor network.
@@ -580,19 +547,19 @@ class ClipGaussianActorNetwork(nn.Module):
             action: Sampled action, scaled to the action space bounds.
             log_prob [Optional]: log probability of the sampled action.
         """
-        mean, log_std = torch.func.functional_call(self, params, (state_batch))
+        mean, log_std = torch.func.functional_call(self, (params, buffer), (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
         action = normal.sample()  # reparameterization trick
-
-        if get_log_prob:
-            log_prob = normal.log_prob(action)
-            return action, log_prob
-        else:
-            return action
+        return action
 
     def get_action_log_prob_and_entropy(
-        self, state_batch: torch.Tensor, action_batch: torch.Tensor, params
+        self, 
+        state_batch: torch.Tensor, 
+        action_batch: torch.Tensor, 
+        params, 
+        buffers,
+        action_space_mask: torch.Tensor
     ) -> Tuple[Tensor, Tensor]:
         """
         Compute log probability of actions, pi(a|s) under the policy parameterized by
@@ -603,11 +570,13 @@ class ClipGaussianActorNetwork(nn.Module):
         Returns:
             log_prob: log probability of each action in the batch
         """
-        mean, log_std = torch.func.functional_call(self, params, (state_batch))
+        mean, log_std = torch.func.functional_call(self, (params, buffers), (state_batch))
         std = log_std.exp()
         normal = Normal(mean, std)
         log_prob = normal.log_prob(action_batch)
+        log_prob = log_prob * action_space_mask
         entropy = normal.entropy()
+        entropy = entropy * action_space_mask
         assert log_prob.dim() == 2
         assert entropy.dim() == 2
         if log_prob.dim() == 2:

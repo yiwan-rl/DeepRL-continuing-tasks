@@ -151,7 +151,7 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
                 None,  # critic_network_instance
                 0,  # critic_params
                 0,  # critic_buffers
-                1,  # state
+                0,  # state
                 0,  # action_space_low
                 0,  # action_space_high
                 0  # action_space_mask
@@ -168,11 +168,11 @@ class DeepDeterministicPolicyGradient(ActorCriticBase):
                 0,  # critic_buffers batched over experiments
                 0,  # critic_target_params batched over experiments
                 0,  # critic_target_buffers batched over experiments
-                1,  # state
-                1,  # action
-                1,  # terminated
-                1,  # reward
-                1,  # next_state
+                0,  # state
+                0,  # action
+                0,  # terminated
+                0,  # reward
+                0,  # next_state
                 None,  # discount_factor
                 0,  # action_space_low
                 0,  # action_space_high

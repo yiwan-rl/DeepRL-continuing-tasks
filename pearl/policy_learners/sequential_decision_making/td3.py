@@ -121,16 +121,19 @@ def critic_loss_fn(
             next_action + noise, action_space_low, action_space_high
         )  # shape (batch_size, action_dim)
 
-        next_q = vmap(critic_subnetwork_forward, in_dims=(0, 0, None, None, None))(
+        next_qs = vmap(critic_subnetwork_forward, in_dims=(0, 0, None, None, None))(
             critic_target_params, critic_target_buffers, critic_network_instance, next_state, next_action
         )  # shape (ensemble_size, batch_size)
+
+        next_q = torch.min(next_qs, dim=0).values  # shape (batch_size)
 
         expected_state_action_values = (
             next_q * discount_factor * (1 - terminated.float())
         ) + reward  # shape (ensemble_size,batch_size)
 
-    q = vmap(critic_subnetwork_forward, in_dims=(0, 0, None, None, None))(critic_params, critic_buffers, critic_network_instance, state, action)  # shape (ensemble_size, batch_size)
-    loss = F.mse_loss(q, expected_state_action_values.detach())
+    qs = vmap(critic_subnetwork_forward, in_dims=(0, 0, None, None, None))(critic_params, critic_buffers, critic_network_instance, state, action)  # shape (ensemble_size, batch_size)
+    
+    loss = F.mse_loss(qs, expected_state_action_values.detach().unsqueeze(0).expand(qs.shape[0], -1))
     return loss
 
 
@@ -195,7 +198,7 @@ class TD3(ActorCriticBase):
                 None,  # critic_network_instance
                 0,  # critic_params
                 0,  # critic_buffers
-                1,  # state
+                0,  # state
                 0,  # action_space_low
                 0,  # action_space_high
                 0  # action_space_mask
@@ -212,11 +215,11 @@ class TD3(ActorCriticBase):
                 0,  # critic_buffers batched over experiments
                 0,  # critic_target_params batched over experiments
                 0,  # critic_target_buffers batched over experiments
-                1,  # state
-                1,  # action
-                1,  # terminated
-                1,  # reward
-                1,  # next_state
+                0,  # state
+                0,  # action
+                0,  # terminated
+                0,  # reward
+                0,  # next_state
                 None,  # discount_factor
                 0,  # action_space_low
                 0,  # action_space_high
