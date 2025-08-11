@@ -410,11 +410,12 @@ def eval_continuing(
 
         # update stats
         eval_cum_reward += reward
-        eval_cum_reset += int(info.get("reset", False))
 
         for preprocessor in preprocessors:
             observation, reward, terminated, truncated, info = preprocessor.process(observation, reward, terminated, truncated, info)
         eval_cum_clipped_reward += reward
+        eval_cum_reset += np.array([i.get("num_resets", 0) for i in info])
+        
 
         # the agent receives the action result
         eval_continuing_agent.observe(observation, reward, terminated, truncated, info)
@@ -602,134 +603,6 @@ def run_episode(
         info["frames"] = frames
     return info, episode_steps
 
-
-def train_episodic(
-    train_agent: PearlAgent,
-    eval_continuing_agent: PearlAgent,
-    eval_episodic_agent: PearlAgent,
-    train_env: GymEnvironment,
-    eval_continuing_env: Optional[GymEnvironment],
-    eval_episodic_env: Optional[GymEnvironment],
-    param_sweeper_dict: Dict[str, Any],
-) -> None:
-    print_every_x_steps = param_sweeper_dict["print_every_x_steps"]
-    learn_every_k_steps = param_sweeper_dict["learn_every_k_steps"]
-    record_period = param_sweeper_dict["record_period"]
-    run_idx = param_sweeper_dict["id"]
-    number_of_steps = param_sweeper_dict["max_steps"]
-    eval_max_steps = param_sweeper_dict["eval_max_steps"]
-    record_visited_observations = param_sweeper_dict.get("record_visited_observations", False)
-    observation_record_period = param_sweeper_dict.get("observation_record_period", 1000)
-    total_steps = 0
-    total_episodes = 0
-    info = {}
-    info_period = {}
-    eval_episodic_return_list, eval_average_reward_list, eval_episodic_clipped_return_list, eval_average_clipped_reward_list, eval_average_reset_list = [], [], [], [], []  # noqa
-    learning_report = {}
-    learning_report_cache = {}
-    start_time = time.time()
-    last_timed_steps = 0
-    visited_observations = []
-
-    while total_steps < number_of_steps:
-        old_total_steps = total_steps
-        episode_info, episode_total_steps = run_episode(
-            train_agent,
-            train_env,
-            exploit=False,
-            learn_after_episode=False,  # not for this project
-            learn_every_k_steps=learn_every_k_steps,
-            total_steps=old_total_steps,
-            learning_start=param_sweeper_dict["learning_starts"],
-            learn=True,
-            preprocessors=param_sweeper_dict["preprocessors"],
-            learning_report_cache=learning_report_cache,
-            number_of_steps=number_of_steps,
-            visited_observations=visited_observations,
-            record_visited_observations=record_visited_observations,
-            observation_record_period=observation_record_period,
-        )
-
-        total_steps += episode_total_steps
-        total_episodes += 1
-
-        # print stats
-        if old_total_steps // print_every_x_steps < total_steps // print_every_x_steps:
-            logger.info(
-                f"episode {total_episodes}, steps {total_steps}, agent={train_agent}, env={train_env}",
-            )
-            end_time = time.time()
-            SPS = int((total_steps - last_timed_steps) / (end_time - start_time))
-            logger.info(f"samples per second: {SPS}")
-            start_time = end_time
-            last_timed_steps = total_steps
-            for key in episode_info:
-                logger.info(f"{key}: {episode_info[key]}")
-
-        for key in episode_info:
-            info_period.setdefault(key, []).append(episode_info[key])
-        if old_total_steps // record_period < total_steps // record_period:
-            # multiple record_periods may pass between old_total_steps and total_steps
-            # duplicate the recording to simulate recording every record_period steps
-            num_repeating_recordings = (total_steps // record_period) - (
-                old_total_steps // record_period
-            )
-            for _ in range(num_repeating_recordings):
-                for key in info_period:
-                    info.setdefault(key, []).append(np.mean(info_period[key]))
-            info_period = {}
-            # evaluate the learned policy in the episodic and continuing versions of the environment
-            if param_sweeper_dict.get("eval_in_episodic_env", False):
-                eval_episodic_return, eval_episodic_clipped_return = eval_episodic(
-                    eval_episodic_agent=eval_episodic_agent,
-                    eval_episodic_env=eval_episodic_env,
-                    eval_max_steps=eval_max_steps,
-                    preprocessors=param_sweeper_dict["preprocessors"],
-                )
-            else:
-                eval_episodic_return, eval_episodic_clipped_return = None, None
-
-            if param_sweeper_dict.get("eval_in_continuing_env", False):
-                eval_average_reward, eval_average_clipped_reward, eval_average_reset = eval_continuing(
-                    eval_continuing_agent=eval_continuing_agent,
-                    eval_continuing_env=eval_continuing_env,
-                    eval_max_steps=eval_max_steps,
-                    preprocessors=param_sweeper_dict["preprocessors"],
-                )
-            else:
-                eval_average_reward, eval_average_clipped_reward, eval_average_reset = None, None, None
-
-            for _ in range(num_repeating_recordings):
-                if eval_episodic_return is not None:
-                    eval_episodic_return_list.append(eval_episodic_return)
-                if eval_average_reward is not None:
-                    eval_average_reward_list.append(eval_average_reward)
-                if eval_episodic_clipped_return is not None:
-                    eval_episodic_clipped_return_list.append(eval_episodic_clipped_return)
-                if eval_average_clipped_reward is not None:
-                    eval_average_clipped_reward_list.append(eval_average_clipped_reward)
-                if eval_average_reset is not None:
-                    eval_average_reset_list.append(eval_average_reset)
-                for key in learning_report_cache:
-                    learning_report.setdefault(key, []).append(
-                        np.mean(learning_report_cache[key])
-                    )
-
-    output_dir = param_sweeper_dict["output_dir"]
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # save stats
-    save_data_dict = {
-        "eval_episodic_return": eval_episodic_return_list,
-        "eval_average_reward": eval_average_reward_list,
-        "eval_episodic_clipped_return": eval_episodic_clipped_return_list,
-        "eval_average_clipped_reward": eval_average_clipped_reward_list,
-        "eval_average_reset": eval_average_reset_list,
-        "visited_observations": visited_observations,
-    }
-    save_data_dict.update(info)
-    save_data_dict.update(learning_report)
-    save_as_npy(data=save_data_dict, output_dir=output_dir, run_idx=run_idx)
 
 def create_wandb_metrics(experiment_stats: Dict[str, Any], param_sweeper_dict: Dict[str, Any]) -> Dict[str, Any]:
     average_reward_list = experiment_stats["avg_reward_list"]
@@ -1086,13 +959,14 @@ def init_class(
     return module_class(**filtered_dict)
 
 
-# def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
-#     param_sweeper_dict["actor_network_instance"].apply(orthogonal_init_weights)
-#     param_sweeper_dict["critic_network_instance"].apply(orthogonal_init_weights)
-#     if hasattr(param_sweeper_dict["actor_network_instance"], "fc_mu"):
-#         param_sweeper_dict["actor_network_instance"].fc_mu.weight.data.copy_(
-#             0.01 * param_sweeper_dict["actor_network_instance"].fc_mu.weight.data
-#         )
+def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
+    for actor_network_instance, critic_network_instance in zip(param_sweeper_dict["actor_network_instances"], param_sweeper_dict["critic_network_instances"]):
+        actor_network_instance.apply(orthogonal_init_weights)
+        critic_network_instance.apply(orthogonal_init_weights)
+        if hasattr(actor_network_instance, "fc_mu"):
+            actor_network_instance.fc_mu.weight.data.copy_(
+                0.01 * actor_network_instance.fc_mu.weight.data
+            )
 
 
 # def ppo_init_network_discrete(param_sweeper_dict: Dict[str, Any]) -> None:
@@ -1436,11 +1310,11 @@ if __name__ == "__main__":
     network initialization
     """
 
-    # if (
-    #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
-    #     and param_sweeper_dict["is_action_continuous"] is True
-    # ):
-    #     ppo_init_network_continuous(param_sweeper_dict)
+    if (
+        param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
+        and param_sweeper_dict["is_action_continuous"] is True
+    ):
+        ppo_init_network_continuous(param_sweeper_dict)
 
     # if (
     #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
@@ -1457,59 +1331,6 @@ if __name__ == "__main__":
     # Initialize optimizers
     # """
 
-    # if "optimizer:type" in param_sweeper_dict:
-    #     assert "network_instance" in param_sweeper_dict
-    #     optimizer_class: Type[torch.optim.Optimizer] = getattr(
-    #         torch.optim, param_sweeper_dict["optimizer:type"]
-    #     )
-    #     param_sweeper_dict["optimizer:params"] = param_sweeper_dict[
-    #         "network_instance"
-    #     ].parameters()
-    #     param_sweeper_dict["optimizer"] = init_class(optimizer_class, "optimizer", param_sweeper_dict)
-
-    # if "actor_optimizer:type" in param_sweeper_dict:
-    #     assert "actor_network_instance" in param_sweeper_dict
-    #     actor_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-    #         torch.optim, param_sweeper_dict["actor_optimizer:type"]
-    #     )
-    #     param_sweeper_dict["actor_optimizer:params"] = param_sweeper_dict[
-    #         "actor_network_instance"
-    #     ].parameters()
-    #     param_sweeper_dict["actor_optimizer"] = init_class(actor_optimizer_class, "actor_optimizer", param_sweeper_dict)
-
-    # if "critic_optimizer:type" in param_sweeper_dict:
-    #     assert "critic_network_instance" in param_sweeper_dict
-    #     critic_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-    #         torch.optim, param_sweeper_dict["critic_optimizer:type"]
-    #     )
-    #     param_sweeper_dict["critic_optimizer:params"] = param_sweeper_dict[
-    #         "critic_network_instance"
-    #     ].parameters()
-    #     param_sweeper_dict["critic_optimizer"] = init_class(critic_optimizer_class, "critic_optimizer", param_sweeper_dict)
-
-    # if param_sweeper_dict.get("reward_centering:type", None) is not None:
-    #     if param_sweeper_dict["reward_centering:type"] == "TD":
-    #         reward_rate_optimizer_class: Type[torch.optim.Optimizer] = getattr(
-    #             torch.optim, param_sweeper_dict["reward_rate_optimizer:type"]
-    #         )
-    #         param_sweeper_dict["reward_rate_optimizer:params"] = [
-    #             param_sweeper_dict["reward_rate"]
-    #         ]
-    #         param_sweeper_dict["reward_rate_optimizer"] = init_class(
-    #             reward_rate_optimizer_class, "reward_rate_optimizer", param_sweeper_dict
-    #         )
-    #         param_sweeper_dict["reward_centering:optimizer"] = param_sweeper_dict[
-    #             "reward_rate_optimizer"
-    #         ]
-    #         param_sweeper_dict["reward_centering"] = init_class(TD_RC, "reward_centering", param_sweeper_dict)
-    #     elif param_sweeper_dict["reward_centering:type"] == "MA":
-    #         param_sweeper_dict["reward_centering"] = init_class(MA_RC, "reward_centering", param_sweeper_dict)
-    #     elif param_sweeper_dict["reward_centering:type"] == "RVI":
-    #         param_sweeper_dict["reward_centering"] = init_class(RVI_RC, "reward_centering", param_sweeper_dict)
-
-    # ---------------------
-    # Optimizer setup
-    # ---------------------
     if param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization":
         param_sweeper_dict["actor_optimizer"] = torchopt.chain(
             torchopt.clip_grad_norm(max_norm=param_sweeper_dict["max_grad_norm"]), 
