@@ -659,8 +659,8 @@ def train(
     output_dir = param_sweeper_dict["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
     
-    # Initialize wandb
-    init_wandb(param_sweeper_dict)
+    # # Initialize wandb
+    # init_wandb(param_sweeper_dict)
 
     # record stats initialization
     experiment_stats = {
@@ -889,9 +889,9 @@ def train(
                         np.mean(learning_report_cache[key])
                     )
                 
-                print("log to wandb")
-                wandb_metrics = create_wandb_metrics(experiment_stats, param_sweeper_dict)
-                log_to_wandb(wandb_metrics, steps)
+            #     # print("log to wandb")
+            #     # wandb_metrics = create_wandb_metrics(experiment_stats, param_sweeper_dict)
+            #     # log_to_wandb(wandb_metrics, steps)
 
     # save all the recorded stats
     save_data_dict = {
@@ -1003,6 +1003,8 @@ def q_init_network(param_sweeper_dict: Dict[str, Any]) -> None:
 
 
 if __name__ == "__main__":
+    torch.set_num_threads(1)
+    # torch.set_num_interop_threads(1)
     start_time = time.time()
     parser = argparse.ArgumentParser(description="run_file")
     parser.add_argument("--gpu-id", default=-1)
@@ -1396,10 +1398,11 @@ if __name__ == "__main__":
     Run the experiment
     """
     def create_an_eval_agent_from_a_train_agent(a_train_agent: PearlAgent) -> PearlAgent:
-        an_eval_agent: PearlAgent = copy.deepcopy(a_train_agent)
-        an_eval_agent.policy_learner = a_train_agent.policy_learner
         # pyre-fixme
-        an_eval_agent.replay_buffer = a_train_agent.replay_buffer.__class__(capacity=0)
+        policy_learner = a_train_agent.policy_learner
+        replay_buffer = a_train_agent.replay_buffer.__class__(capacity=0)
+        device_id = a_train_agent._device_id
+        an_eval_agent = PearlAgent(policy_learner, replay_buffer, device_id)
         return an_eval_agent
 
     if args.eval_agent:
@@ -1462,10 +1465,8 @@ if __name__ == "__main__":
     else:
         """TODO: fix this"""
         # create two copies of the agent, one for continuing and one for episodic evaluation
-        # eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
-        # eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
-        eval_continuing_agent: PearlAgent = train_agent
-        eval_episodic_agent: PearlAgent = train_agent
+        eval_continuing_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
+        eval_episodic_agent: PearlAgent = create_an_eval_agent_from_a_train_agent(train_agent)
 
         train(
             train_agent, 

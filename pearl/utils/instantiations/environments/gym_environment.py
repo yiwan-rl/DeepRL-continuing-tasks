@@ -126,16 +126,16 @@ class GymEnvironment:
 
 
     def step(self, action: Action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+        unpadded_actions = [action[i, :self._action_space.actual_sizes[i]] for i in range(self.num_envs)]
         if self.batched:
             # remove the padding
-            unpadded_actions = [action[i, :self._action_space.actual_sizes[i]] for i in range(self.num_envs)]
             for i in range(self.num_processes):
                 remote = self.remotes[i]
                 act_chunk = [unpadded_actions[j] for j in self.env_indices_per_proc_list[i]]
                 remote.send(("step", act_chunk))
             results = sum([remote.recv() for remote in self.remotes], [])  # flatten
         else:
-            results = [env.step(action[i]) for i, env in enumerate(self.env)]
+            results = [env.step(unpadded_actions[i]) for i, env in enumerate(self.env)]
 
         observations, rewards, terminations, truncations, infos = zip(*results)
 
