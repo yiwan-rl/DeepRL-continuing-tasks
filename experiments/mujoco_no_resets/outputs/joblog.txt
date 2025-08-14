@@ -1,0 +1,289 @@
+Seq	Host	Starttime	JobRuntime	Send	Receive	Exitval	Signal	Command
+6	:	1754977936.772	     7.601	0	15	1	0	echo 'Starting job 5' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 5 --gpu-id -2 > experiments/mujoco_no_resets/outputs//5.log 2>&1 && 
+     echo 'Completed job 5' >&2
+29	:	1754977936.826	     7.851	0	16	1	0	echo 'Starting job 28' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 28 --gpu-id -2 > experiments/mujoco_no_resets/outputs//28.log 2>&1 && 
+     echo 'Completed job 28' >&2
+2	:	1754977936.764	     7.967	0	15	1	0	echo 'Starting job 1' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 1 --gpu-id -2 > experiments/mujoco_no_resets/outputs//1.log 2>&1 && 
+     echo 'Completed job 1' >&2
+20	:	1754977936.802	     7.967	0	16	1	0	echo 'Starting job 19' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 19 --gpu-id -2 > experiments/mujoco_no_resets/outputs//19.log 2>&1 && 
+     echo 'Completed job 19' >&2
+7	:	1754977936.774	     8.009	0	15	1	0	echo 'Starting job 6' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 6 --gpu-id -2 > experiments/mujoco_no_resets/outputs//6.log 2>&1 && 
+     echo 'Completed job 6' >&2
+8	:	1754977936.777	     8.022	0	15	1	0	echo 'Starting job 7' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 7 --gpu-id -2 > experiments/mujoco_no_resets/outputs//7.log 2>&1 && 
+     echo 'Completed job 7' >&2
+4	:	1754977936.768	     8.046	0	15	1	0	echo 'Starting job 3' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 3 --gpu-id -2 > experiments/mujoco_no_resets/outputs//3.log 2>&1 && 
+     echo 'Completed job 3' >&2
+16	:	1754977936.794	     8.032	0	16	1	0	echo 'Starting job 15' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 15 --gpu-id -2 > experiments/mujoco_no_resets/outputs//15.log 2>&1 && 
+     echo 'Completed job 15' >&2
+17	:	1754977936.796	     8.050	0	16	1	0	echo 'Starting job 16' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 16 --gpu-id -2 > experiments/mujoco_no_resets/outputs//16.log 2>&1 && 
+     echo 'Completed job 16' >&2
+46	:	1754977936.880	     7.986	0	16	1	0	echo 'Starting job 45' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 45 --gpu-id -2 > experiments/mujoco_no_resets/outputs//45.log 2>&1 && 
+     echo 'Completed job 45' >&2
+15	:	1754977936.792	     8.093	0	16	1	0	echo 'Starting job 14' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 14 --gpu-id -2 > experiments/mujoco_no_resets/outputs//14.log 2>&1 && 
+     echo 'Completed job 14' >&2
+3	:	1754977936.766	     8.132	0	15	1	0	echo 'Starting job 2' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 2 --gpu-id -2 > experiments/mujoco_no_resets/outputs//2.log 2>&1 && 
+     echo 'Completed job 2' >&2
+5	:	1754977936.770	     8.153	0	15	1	0	echo 'Starting job 4' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 4 --gpu-id -2 > experiments/mujoco_no_resets/outputs//4.log 2>&1 && 
+     echo 'Completed job 4' >&2
+21	:	1754977936.804	     8.126	0	16	1	0	echo 'Starting job 20' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 20 --gpu-id -2 > experiments/mujoco_no_resets/outputs//20.log 2>&1 && 
+     echo 'Completed job 20' >&2
+1	:	1754977936.763	     8.174	0	15	1	0	echo 'Starting job 0' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 0 --gpu-id -2 > experiments/mujoco_no_resets/outputs//0.log 2>&1 && 
+     echo 'Completed job 0' >&2
+12	:	1754977936.785	     8.161	0	16	1	0	echo 'Starting job 11' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 11 --gpu-id -2 > experiments/mujoco_no_resets/outputs//11.log 2>&1 && 
+     echo 'Completed job 11' >&2
+23	:	1754977936.808	     8.144	0	16	1	0	echo 'Starting job 22' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 22 --gpu-id -2 > experiments/mujoco_no_resets/outputs//22.log 2>&1 && 
+     echo 'Completed job 22' >&2
+9	:	1754977936.779	     8.180	0	15	1	0	echo 'Starting job 8' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 8 --gpu-id -2 > experiments/mujoco_no_resets/outputs//8.log 2>&1 && 
+     echo 'Completed job 8' >&2
+22	:	1754977936.806	     8.163	0	16	1	0	echo 'Starting job 21' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 21 --gpu-id -2 > experiments/mujoco_no_resets/outputs//21.log 2>&1 && 
+     echo 'Completed job 21' >&2
+14	:	1754977936.790	     8.186	0	16	1	0	echo 'Starting job 13' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 13 --gpu-id -2 > experiments/mujoco_no_resets/outputs//13.log 2>&1 && 
+     echo 'Completed job 13' >&2
+31	:	1754977936.832	     8.151	0	16	1	0	echo 'Starting job 30' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 30 --gpu-id -2 > experiments/mujoco_no_resets/outputs//30.log 2>&1 && 
+     echo 'Completed job 30' >&2
+33	:	1754977936.838	     8.151	0	16	1	0	echo 'Starting job 32' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 32 --gpu-id -2 > experiments/mujoco_no_resets/outputs//32.log 2>&1 && 
+     echo 'Completed job 32' >&2
+47	:	1754977936.883	     8.114	0	16	1	0	echo 'Starting job 46' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 46 --gpu-id -2 > experiments/mujoco_no_resets/outputs//46.log 2>&1 && 
+     echo 'Completed job 46' >&2
+10	:	1754977936.781	     8.223	0	15	1	0	echo 'Starting job 9' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 9 --gpu-id -2 > experiments/mujoco_no_resets/outputs//9.log 2>&1 && 
+     echo 'Completed job 9' >&2
+38	:	1754977936.854	     8.157	0	16	1	0	echo 'Starting job 37' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 37 --gpu-id -2 > experiments/mujoco_no_resets/outputs//37.log 2>&1 && 
+     echo 'Completed job 37' >&2
+19	:	1754977936.800	     8.228	0	16	1	0	echo 'Starting job 18' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 18 --gpu-id -2 > experiments/mujoco_no_resets/outputs//18.log 2>&1 && 
+     echo 'Completed job 18' >&2
+44	:	1754977936.874	     8.161	0	16	1	0	echo 'Starting job 43' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 43 --gpu-id -2 > experiments/mujoco_no_resets/outputs//43.log 2>&1 && 
+     echo 'Completed job 43' >&2
+11	:	1754977936.783	     8.259	0	16	1	0	echo 'Starting job 10' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 10 --gpu-id -2 > experiments/mujoco_no_resets/outputs//10.log 2>&1 && 
+     echo 'Completed job 10' >&2
+41	:	1754977936.863	     8.188	0	16	1	0	echo 'Starting job 40' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 40 --gpu-id -2 > experiments/mujoco_no_resets/outputs//40.log 2>&1 && 
+     echo 'Completed job 40' >&2
+32	:	1754977936.835	     8.231	0	16	1	0	echo 'Starting job 31' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 31 --gpu-id -2 > experiments/mujoco_no_resets/outputs//31.log 2>&1 && 
+     echo 'Completed job 31' >&2
+18	:	1754977936.798	     8.296	0	16	1	0	echo 'Starting job 17' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 17 --gpu-id -2 > experiments/mujoco_no_resets/outputs//17.log 2>&1 && 
+     echo 'Completed job 17' >&2
+28	:	1754977936.823	     8.296	0	16	1	0	echo 'Starting job 27' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 27 --gpu-id -2 > experiments/mujoco_no_resets/outputs//27.log 2>&1 && 
+     echo 'Completed job 27' >&2
+30	:	1754977936.829	     8.309	0	16	1	0	echo 'Starting job 29' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 29 --gpu-id -2 > experiments/mujoco_no_resets/outputs//29.log 2>&1 && 
+     echo 'Completed job 29' >&2
+24	:	1754977936.811	     8.342	0	16	1	0	echo 'Starting job 23' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 23 --gpu-id -2 > experiments/mujoco_no_resets/outputs//23.log 2>&1 && 
+     echo 'Completed job 23' >&2
+26	:	1754977936.817	     8.344	0	16	1	0	echo 'Starting job 25' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 25 --gpu-id -2 > experiments/mujoco_no_resets/outputs//25.log 2>&1 && 
+     echo 'Completed job 25' >&2
+35	:	1754977936.845	     8.328	0	16	1	0	echo 'Starting job 34' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 34 --gpu-id -2 > experiments/mujoco_no_resets/outputs//34.log 2>&1 && 
+     echo 'Completed job 34' >&2
+36	:	1754977936.848	     8.332	0	16	1	0	echo 'Starting job 35' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 35 --gpu-id -2 > experiments/mujoco_no_resets/outputs//35.log 2>&1 && 
+     echo 'Completed job 35' >&2
+37	:	1754977936.851	     8.335	0	16	1	0	echo 'Starting job 36' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 36 --gpu-id -2 > experiments/mujoco_no_resets/outputs//36.log 2>&1 && 
+     echo 'Completed job 36' >&2
+39	:	1754977936.857	     8.336	0	16	1	0	echo 'Starting job 38' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 38 --gpu-id -2 > experiments/mujoco_no_resets/outputs//38.log 2>&1 && 
+     echo 'Completed job 38' >&2
+40	:	1754977936.860	     8.340	0	16	1	0	echo 'Starting job 39' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 39 --gpu-id -2 > experiments/mujoco_no_resets/outputs//39.log 2>&1 && 
+     echo 'Completed job 39' >&2
+42	:	1754977936.867	     8.355	0	16	1	0	echo 'Starting job 41' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 41 --gpu-id -2 > experiments/mujoco_no_resets/outputs//41.log 2>&1 && 
+     echo 'Completed job 41' >&2
+48	:	1754977936.886	     8.344	0	16	1	0	echo 'Starting job 47' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 47 --gpu-id -2 > experiments/mujoco_no_resets/outputs//47.log 2>&1 && 
+     echo 'Completed job 47' >&2
+49	:	1754977936.890	     8.360	0	16	1	0	echo 'Starting job 48' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 48 --gpu-id -2 > experiments/mujoco_no_resets/outputs//48.log 2>&1 && 
+     echo 'Completed job 48' >&2
+27	:	1754977936.820	     8.452	0	16	1	0	echo 'Starting job 26' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 26 --gpu-id -2 > experiments/mujoco_no_resets/outputs//26.log 2>&1 && 
+     echo 'Completed job 26' >&2
+50	:	1754977936.894	     8.396	0	16	1	0	echo 'Starting job 49' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 49 --gpu-id -2 > experiments/mujoco_no_resets/outputs//49.log 2>&1 && 
+     echo 'Completed job 49' >&2
+51	:	1754977936.897	     8.417	0	16	1	0	echo 'Starting job 50' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 50 --gpu-id -2 > experiments/mujoco_no_resets/outputs//50.log 2>&1 && 
+     echo 'Completed job 50' >&2
+25	:	1754977936.814	     8.564	0	16	1	0	echo 'Starting job 24' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 24 --gpu-id -2 > experiments/mujoco_no_resets/outputs//24.log 2>&1 && 
+     echo 'Completed job 24' >&2
+43	:	1754977936.870	     8.520	0	16	1	0	echo 'Starting job 42' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 42 --gpu-id -2 > experiments/mujoco_no_resets/outputs//42.log 2>&1 && 
+     echo 'Completed job 42' >&2
+45	:	1754977936.877	     8.532	0	16	1	0	echo 'Starting job 44' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 44 --gpu-id -2 > experiments/mujoco_no_resets/outputs//44.log 2>&1 && 
+     echo 'Completed job 44' >&2
+52	:	1754977936.900	     8.521	0	16	1	0	echo 'Starting job 51' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 51 --gpu-id -2 > experiments/mujoco_no_resets/outputs//51.log 2>&1 && 
+     echo 'Completed job 51' >&2
+53	:	1754977936.904	     8.532	0	16	1	0	echo 'Starting job 52' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 52 --gpu-id -2 > experiments/mujoco_no_resets/outputs//52.log 2>&1 && 
+     echo 'Completed job 52' >&2
+54	:	1754977936.907	     8.542	0	16	1	0	echo 'Starting job 53' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 53 --gpu-id -2 > experiments/mujoco_no_resets/outputs//53.log 2>&1 && 
+     echo 'Completed job 53' >&2
+55	:	1754977936.910	     8.551	0	16	1	0	echo 'Starting job 54' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 54 --gpu-id -2 > experiments/mujoco_no_resets/outputs//54.log 2>&1 && 
+     echo 'Completed job 54' >&2
+56	:	1754977936.914	     8.568	0	16	1	0	echo 'Starting job 55' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 55 --gpu-id -2 > experiments/mujoco_no_resets/outputs//55.log 2>&1 && 
+     echo 'Completed job 55' >&2
+57	:	1754977936.918	     8.588	0	16	1	0	echo 'Starting job 56' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 56 --gpu-id -2 > experiments/mujoco_no_resets/outputs//56.log 2>&1 && 
+     echo 'Completed job 56' >&2
+58	:	1754977936.921	     8.595	0	16	1	0	echo 'Starting job 57' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 57 --gpu-id -2 > experiments/mujoco_no_resets/outputs//57.log 2>&1 && 
+     echo 'Completed job 57' >&2
+59	:	1754977936.925	     8.611	0	16	1	0	echo 'Starting job 58' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 58 --gpu-id -2 > experiments/mujoco_no_resets/outputs//58.log 2>&1 && 
+     echo 'Completed job 58' >&2
+60	:	1754977936.928	     8.634	0	16	1	0	echo 'Starting job 59' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 59 --gpu-id -2 > experiments/mujoco_no_resets/outputs//59.log 2>&1 && 
+     echo 'Completed job 59' >&2
+61	:	1754977936.932	     8.651	0	16	1	0	echo 'Starting job 60' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 60 --gpu-id -2 > experiments/mujoco_no_resets/outputs//60.log 2>&1 && 
+     echo 'Completed job 60' >&2
+62	:	1754977936.935	     8.660	0	16	1	0	echo 'Starting job 61' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 61 --gpu-id -2 > experiments/mujoco_no_resets/outputs//61.log 2>&1 && 
+     echo 'Completed job 61' >&2
+63	:	1754977936.939	     8.688	0	16	1	0	echo 'Starting job 62' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 62 --gpu-id -2 > experiments/mujoco_no_resets/outputs//62.log 2>&1 && 
+     echo 'Completed job 62' >&2
+64	:	1754977936.942	     8.712	0	16	1	0	echo 'Starting job 63' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 63 --gpu-id -2 > experiments/mujoco_no_resets/outputs//63.log 2>&1 && 
+     echo 'Completed job 63' >&2
+65	:	1754977936.945	     8.725	0	16	1	0	echo 'Starting job 64' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 64 --gpu-id -2 > experiments/mujoco_no_resets/outputs//64.log 2>&1 && 
+     echo 'Completed job 64' >&2
+66	:	1754977936.948	     8.758	0	16	1	0	echo 'Starting job 65' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 65 --gpu-id -2 > experiments/mujoco_no_resets/outputs//65.log 2>&1 && 
+     echo 'Completed job 65' >&2
+67	:	1754977936.951	     8.779	0	16	1	0	echo 'Starting job 66' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 66 --gpu-id -2 > experiments/mujoco_no_resets/outputs//66.log 2>&1 && 
+     echo 'Completed job 66' >&2
+68	:	1754977936.953	     8.809	0	16	1	0	echo 'Starting job 67' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 67 --gpu-id -2 > experiments/mujoco_no_resets/outputs//67.log 2>&1 && 
+     echo 'Completed job 67' >&2
+69	:	1754977936.956	     8.829	0	16	1	0	echo 'Starting job 68' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 68 --gpu-id -2 > experiments/mujoco_no_resets/outputs//68.log 2>&1 && 
+     echo 'Completed job 68' >&2
+70	:	1754977936.958	     8.844	0	16	1	0	echo 'Starting job 69' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 69 --gpu-id -2 > experiments/mujoco_no_resets/outputs//69.log 2>&1 && 
+     echo 'Completed job 69' >&2
+71	:	1754977936.962	     8.868	0	16	1	0	echo 'Starting job 70' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 70 --gpu-id -2 > experiments/mujoco_no_resets/outputs//70.log 2>&1 && 
+     echo 'Completed job 70' >&2
+72	:	1754977936.965	     8.897	0	16	1	0	echo 'Starting job 71' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 71 --gpu-id -2 > experiments/mujoco_no_resets/outputs//71.log 2>&1 && 
+     echo 'Completed job 71' >&2
+73	:	1754977936.968	     8.901	0	16	1	0	echo 'Starting job 72' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 72 --gpu-id -2 > experiments/mujoco_no_resets/outputs//72.log 2>&1 && 
+     echo 'Completed job 72' >&2
+74	:	1754977936.971	     8.924	0	16	1	0	echo 'Starting job 73' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 73 --gpu-id -2 > experiments/mujoco_no_resets/outputs//73.log 2>&1 && 
+     echo 'Completed job 73' >&2
+75	:	1754977936.974	     8.930	0	16	1	0	echo 'Starting job 74' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 74 --gpu-id -2 > experiments/mujoco_no_resets/outputs//74.log 2>&1 && 
+     echo 'Completed job 74' >&2
+76	:	1754977936.977	     8.944	0	16	1	0	echo 'Starting job 75' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 75 --gpu-id -2 > experiments/mujoco_no_resets/outputs//75.log 2>&1 && 
+     echo 'Completed job 75' >&2
+34	:	1754977936.842	     9.108	0	16	1	0	echo 'Starting job 33' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 33 --gpu-id -2 > experiments/mujoco_no_resets/outputs//33.log 2>&1 && 
+     echo 'Completed job 33' >&2
+77	:	1754977936.980	     8.993	0	16	1	0	echo 'Starting job 76' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 76 --gpu-id -2 > experiments/mujoco_no_resets/outputs//76.log 2>&1 && 
+     echo 'Completed job 76' >&2
+78	:	1754977936.983	     9.004	0	16	1	0	echo 'Starting job 77' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 77 --gpu-id -2 > experiments/mujoco_no_resets/outputs//77.log 2>&1 && 
+     echo 'Completed job 77' >&2
+79	:	1754977936.986	     9.016	0	16	1	0	echo 'Starting job 78' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 78 --gpu-id -2 > experiments/mujoco_no_resets/outputs//78.log 2>&1 && 
+     echo 'Completed job 78' >&2
+80	:	1754977936.989	     9.032	0	16	1	0	echo 'Starting job 79' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 79 --gpu-id -2 > experiments/mujoco_no_resets/outputs//79.log 2>&1 && 
+     echo 'Completed job 79' >&2
+81	:	1754977936.992	     9.049	0	16	1	0	echo 'Starting job 80' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 80 --gpu-id -2 > experiments/mujoco_no_resets/outputs//80.log 2>&1 && 
+     echo 'Completed job 80' >&2
+82	:	1754977936.995	     9.063	0	16	1	0	echo 'Starting job 81' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 81 --gpu-id -2 > experiments/mujoco_no_resets/outputs//81.log 2>&1 && 
+     echo 'Completed job 81' >&2
+83	:	1754977936.999	     9.090	0	16	1	0	echo 'Starting job 82' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 82 --gpu-id -2 > experiments/mujoco_no_resets/outputs//82.log 2>&1 && 
+     echo 'Completed job 82' >&2
+84	:	1754977937.002	     9.119	0	16	1	0	echo 'Starting job 83' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 83 --gpu-id -2 > experiments/mujoco_no_resets/outputs//83.log 2>&1 && 
+     echo 'Completed job 83' >&2
+85	:	1754977937.006	     9.131	0	16	1	0	echo 'Starting job 84' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 84 --gpu-id -2 > experiments/mujoco_no_resets/outputs//84.log 2>&1 && 
+     echo 'Completed job 84' >&2
+86	:	1754977937.009	     9.148	0	16	1	0	echo 'Starting job 85' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 85 --gpu-id -2 > experiments/mujoco_no_resets/outputs//85.log 2>&1 && 
+     echo 'Completed job 85' >&2
+87	:	1754977937.012	     9.161	0	16	1	0	echo 'Starting job 86' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 86 --gpu-id -2 > experiments/mujoco_no_resets/outputs//86.log 2>&1 && 
+     echo 'Completed job 86' >&2
+88	:	1754977937.016	     9.177	0	16	1	0	echo 'Starting job 87' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 87 --gpu-id -2 > experiments/mujoco_no_resets/outputs//87.log 2>&1 && 
+     echo 'Completed job 87' >&2
+89	:	1754977937.019	     9.184	0	16	1	0	echo 'Starting job 88' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 88 --gpu-id -2 > experiments/mujoco_no_resets/outputs//88.log 2>&1 && 
+     echo 'Completed job 88' >&2
+13	:	1754977936.787	     9.443	0	16	1	0	echo 'Starting job 12' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 12 --gpu-id -2 > experiments/mujoco_no_resets/outputs//12.log 2>&1 && 
+     echo 'Completed job 12' >&2
+90	:	1754977937.023	     9.220	0	16	1	0	echo 'Starting job 89' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 89 --gpu-id -2 > experiments/mujoco_no_resets/outputs//89.log 2>&1 && 
+     echo 'Completed job 89' >&2
+91	:	1754977937.027	     9.226	0	16	1	0	echo 'Starting job 90' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 90 --gpu-id -2 > experiments/mujoco_no_resets/outputs//90.log 2>&1 && 
+     echo 'Completed job 90' >&2
+92	:	1754977937.030	     9.243	0	16	1	0	echo 'Starting job 91' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 91 --gpu-id -2 > experiments/mujoco_no_resets/outputs//91.log 2>&1 && 
+     echo 'Completed job 91' >&2
+93	:	1754977937.033	     9.253	0	16	1	0	echo 'Starting job 92' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 92 --gpu-id -2 > experiments/mujoco_no_resets/outputs//92.log 2>&1 && 
+     echo 'Completed job 92' >&2
+94	:	1754977937.037	     9.256	0	16	1	0	echo 'Starting job 93' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 93 --gpu-id -2 > experiments/mujoco_no_resets/outputs//93.log 2>&1 && 
+     echo 'Completed job 93' >&2
+95	:	1754977937.040	     9.259	0	16	1	0	echo 'Starting job 94' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 94 --gpu-id -2 > experiments/mujoco_no_resets/outputs//94.log 2>&1 && 
+     echo 'Completed job 94' >&2
+96	:	1754977937.045	     9.266	0	16	1	0	echo 'Starting job 95' >&2 && 
+     python3 run.py --config-file experiments/mujoco_no_resets/inputs.json                     --out-dir experiments/mujoco_no_resets/outputs/                     --base-id 95 --gpu-id -2 > experiments/mujoco_no_resets/outputs//95.log 2>&1 && 
+     echo 'Completed job 95' >&2

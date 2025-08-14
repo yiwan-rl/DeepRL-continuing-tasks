@@ -1,4 +1,6 @@
+*.pdf
 *.log
 *.npy
 __pycache__/
 wandb/
+experiments/mujoco/outputsmodels/

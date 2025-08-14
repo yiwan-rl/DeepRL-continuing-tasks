@@ -123,10 +123,10 @@
             "max_grad_norm": [0.5]
         }
     ],
-    "num_runs": [20],
+    "num_runs": [10],
     "train_env_is_continuing": [true],
     "num_processes": [6],
-    "eval_in_continuing_env": [false],
+    "eval_in_continuing_env": [true],
     "envs_name": [
         {
             "env": [[
@@ -191,21 +191,7 @@
                 {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
                 {"env_name": "Humanoid-no-timeout-v5", "tag": "agent_resets", "additional_action_wrapper": true, "agent_termination_wrapper": true, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": false},
                 {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10},
-                {"env_name": "Humanoid-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true}
-            ]],
-            "eval_continuing_env": [[
-                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
-                {"env_name": "Humanoid-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
-                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true}, 
-                {"env_name": "Humanoid-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
-                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
-                {"env_name": "Humanoid-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
-                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
-                {"env_name": "Humanoid-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true}
-            ]]
-        },
-        {
-            "env": [[
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
                 {"env_name": "SpecialAnt-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
                 {"env_name": "AntNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
                 {"env_name": "SpecialAnt-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
@@ -216,6 +202,14 @@
                 {"env_name": "AntNew-no-timeout-v5", "tag": "episodic_tasks", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true}
             ]],
             "eval_continuing_env": [[
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true}, 
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true, "terminate_when_unhealthy": false},
+                {"env_name": "HumanoidStandup-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
+                {"env_name": "Humanoid-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
                 {"env_name": "SpecialAnt-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10},
                 {"env_name": "AntNew-no-timeout-v5", "tag": "predefined_resets", "additional_action_wrapper": true, "random_termination_wrapper": true, "termination_prob": 0.001, "ignore_termination_truncation_wrapper": true, "reset_wrapper": true, "reset_cost": 10, "terminate_when_unhealthy": true},
                 {"env_name": "SpecialAnt-no-timeout-v5", "tag": "no_resets", "additional_action_wrapper": true},

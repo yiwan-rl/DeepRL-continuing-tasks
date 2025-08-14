@@ -959,14 +959,14 @@ def init_class(
     return module_class(**filtered_dict)
 
 
-def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
-    for actor_network_instance, critic_network_instance in zip(param_sweeper_dict["actor_network_instances"], param_sweeper_dict["critic_network_instances"]):
-        actor_network_instance.apply(orthogonal_init_weights)
-        critic_network_instance.apply(orthogonal_init_weights)
-        if hasattr(actor_network_instance, "fc_mu"):
-            actor_network_instance.fc_mu.weight.data.copy_(
-                0.01 * actor_network_instance.fc_mu.weight.data
-            )
+# def ppo_init_network_continuous(param_sweeper_dict: Dict[str, Any]) -> None:
+#     for actor_network_instance, critic_network_instance in zip(param_sweeper_dict["actor_network_instances"], param_sweeper_dict["critic_network_instances"]):
+#         actor_network_instance.apply(orthogonal_init_weights)
+#         critic_network_instance.apply(orthogonal_init_weights)
+#         if hasattr(actor_network_instance, "fc_mu"):
+#             actor_network_instance.fc_mu.weight.data.copy_(
+#                 0.01 * actor_network_instance.fc_mu.weight.data
+#             )
 
 
 # def ppo_init_network_discrete(param_sweeper_dict: Dict[str, Any]) -> None:
@@ -1312,11 +1312,11 @@ if __name__ == "__main__":
     network initialization
     """
 
-    if (
-        param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
-        and param_sweeper_dict["is_action_continuous"] is True
-    ):
-        ppo_init_network_continuous(param_sweeper_dict)
+    # if (
+    #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
+    #     and param_sweeper_dict["is_action_continuous"] is True
+    # ):
+    #     ppo_init_network_continuous(param_sweeper_dict)
 
     # if (
     #     param_sweeper_dict["policy_learner:type"] == "ProximalPolicyOptimization"
